@@ -78,6 +78,12 @@ class ImageFolder(Dataset[Image.Image | T]):
 
         self.samples = sorted(f for f in splitdir.iterdir() if f.is_file())
 
+        # For small datasets (like dummy data), repeat samples to ensure
+        # epochs have meaningful length for training stability
+        if len(self.samples) > 0 and len(self.samples) < 100:
+            multiplier = 100 // len(self.samples) + 1
+            self.samples = self.samples * multiplier
+
         self.transform = transform
 
     def __getitem__(self, index: int) -> Image.Image | T:

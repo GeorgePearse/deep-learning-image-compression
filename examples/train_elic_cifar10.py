@@ -73,11 +73,11 @@ def train_one_epoch(
 
         if i % 100 == 0 and fabric.is_global_zero:
             print(
-                f"\033[95mTrain epoch\033[0m {epoch}: [{i * len(d)}/{len(dataloader.dataset)}"
-                f" ({100.0 * i / len(dataloader):.0f}%)]"
-                f"\t\033[95mLoss:\033[0m {out_criterion['loss'].item():.3f} |"
-                f"\t\033[95mMSE:\033[0m {out_criterion['mse_loss'].item():.5f} |"
-                f"\t\033[95mBpp:\033[0m {out_criterion['bpp_loss'].item():.2f}"
+                f"\033[34mTrain epoch {epoch}: [{i * len(d)}/{len(dataloader.dataset)}"
+                f" ({100.0 * i / len(dataloader):.0f}%)]\033[0m"
+                f"\t\033[34mLoss:\033[0m {out_criterion['loss'].item():.3f} |"
+                f"\t\033[34mMSE:\033[0m {out_criterion['mse_loss'].item():.5f} |"
+                f"\t\033[34mBpp:\033[0m {out_criterion['bpp_loss'].item():.2f}"
             )
 
 

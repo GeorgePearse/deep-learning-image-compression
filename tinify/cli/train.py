@@ -33,6 +33,10 @@ from tinify.zoo import image_models, video_models
 from .config import Config
 
 
+# Set precision for Tensor Cores (A100/H100 etc)
+torch.set_float32_matmul_precision("high")
+
+
 class AverageMeter:
     """Compute running average."""
 
@@ -292,14 +296,19 @@ def train_one_epoch(
         aux_optimizer.step()
 
         if i % config.training.log_interval == 0 and fabric.is_global_zero:
+            mem_str = ""
+            if torch.cuda.is_available():
+                mem_str = f"\t| Mem: \033[0m{torch.cuda.memory_allocated() / 1024 / 1024:.0f}MB"
+
             print(
-                f"Train epoch {epoch}: ["
+                f"\033[34mTrain epoch {epoch}: ["
                 f"{i * len(d) if domain != 'video' else i}/{len(train_dataloader.dataset)}"
-                f" ({100.0 * i / len(train_dataloader):.0f}%)]"
-                f"\tLoss: {out_criterion['loss'].item():.3f} |"
-                f"\tMSE loss: {out_criterion.get('mse_loss', out_criterion.get('ms_ssim_loss', 0)):.5f} |"
-                f"\tBpp loss: {out_criterion['bpp_loss'].item():.2f} |"
-                f"\tAux loss: {aux_loss.item():.2f}"
+                f" ({100.0 * i / len(train_dataloader):.0f}%)]\033[0m"
+                f"\t\033[34mLoss: \033[0m{out_criterion['loss'].item():.3f}\033[34m |"
+                f"\tMSE loss: \033[0m{out_criterion.get('mse_loss', out_criterion.get('ms_ssim_loss', 0)):.5f}\033[34m |"
+                f"\tBpp loss: \033[0m{out_criterion['bpp_loss'].item():.2f}\033[34m |"
+                f"\tAux loss: \033[0m{aux_loss.item():.2f}"
+                f"\033[34m{mem_str}\033[0m"
             )
 
 
@@ -338,11 +347,11 @@ def test_epoch(
 
     if fabric.is_global_zero:
         print(
-            f"Test epoch {epoch}: Average losses:"
-            f"\tLoss: {loss.avg:.3f} |"
-            f"\tMSE loss: {mse_loss.avg:.5f} |"
-            f"\tBpp loss: {bpp_loss.avg:.2f} |"
-            f"\tAux loss: {aux_loss.avg:.2f}\n"
+            f"\033[95mTest epoch \033[0m{epoch}\033[95m: Average losses:"
+            f"\tLoss: \033[0m{loss.avg:.3f}\033[95m |"
+            f"\tMSE loss: \033[0m{mse_loss.avg:.5f}\033[95m |"
+            f"\tBpp loss: \033[0m{bpp_loss.avg:.2f}\033[95m |"
+            f"\tAux loss: \033[0m{aux_loss.avg:.2f}\n\033[0m"
         )
 
     return loss.avg
@@ -512,7 +521,9 @@ def train(config: Config) -> None:
 
     for epoch in range(last_epoch, config.training.epochs):
         if fabric.is_global_zero:
-            print(f"Learning rate: {optimizer.param_groups[0]['lr']:.6f}")
+            print(
+                f"\033[95mLearning rate: \033[0m{optimizer.param_groups[0]['lr']:.6f}\033[0m"
+            )
 
         train_one_epoch(
             fabric,

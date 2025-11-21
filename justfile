@@ -4,7 +4,7 @@ default:
 
 # Train a model
 train:
-    uv run tinify train image -d dummy_dataset -e 1 --batch-size 1 --patch-size 128 128 --model mbt2018-mean
+    uv run tinify train image -d dummy_dataset -e 50 --batch-size 1 --patch-size 128 128 --model mbt2018-mean
 
 # Run all linting and type checking
 lint:

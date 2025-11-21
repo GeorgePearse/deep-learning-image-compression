@@ -64,3 +64,11 @@ These papers established the core architectures and techniques used in modern le
 | **Image and Video Compression with Neural Networks: A Review** | [arXiv](https://arxiv.org/abs/1904.03567) |
 | **Deep Architectures for Image Compression: A Critical Review** | [ScienceDirect](https://www.sciencedirect.com/science/article/abs/pii/S0165168421003832) |
 | **Information Compression in the AI Era: Recent Advances and Future Challenges** | [arXiv](https://arxiv.org/html/2406.10036v1) |
+
+## Implementation Note: Fabric vs. PyTorch Lightning
+
+We have chosen to use **Lightning Fabric** over PyTorch Lightning for this project.
+
+*   **Why Fabric?** Fabric allows for a "build-your-own-loop" approach, which is essential for the custom training requirements of neural compression (e.g., separate auxiliary loss optimization steps, custom rate-distortion loss handling). It provides the necessary control without the "magic" or restrictive structure of a full LightningModule.
+*   **Trade-offs:** Fabric does not have a built-in callback system (like `EarlyStopping` or `ModelCheckpoint`). These features must be implemented manually in the training loop, as seen in `tinify/cli/train.py`.
+*   **Decision:** Stick with Fabric for the transparency and granular control it offers, which outweighs the convenience of pre-built callbacks for this specific use case.

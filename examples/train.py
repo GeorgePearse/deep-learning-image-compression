@@ -107,13 +107,13 @@ def train_one_epoch(
 
         if i % 10 == 0 and fabric.is_global_zero:
             print(
-                f"Train epoch {epoch}: ["
+                f"\033[34mTrain epoch {epoch}: ["
                 f"{i * len(d)}/{len(train_dataloader.dataset)}"
                 f" ({100.0 * i / len(train_dataloader):.0f}%)]"
                 f"\tLoss: {out_criterion['loss'].item():.3f} |"
                 f"\tMSE loss: {out_criterion['mse_loss'].item():.3f} |"
                 f"\tBpp loss: {out_criterion['bpp_loss'].item():.2f} |"
-                f"\tAux loss: {aux_loss.item():.2f}"
+                f"\tAux loss: {aux_loss.item():.2f}\033[0m"
             )
 
 
@@ -137,11 +137,11 @@ def test_epoch(fabric, epoch, test_dataloader, model, criterion):
 
     if fabric.is_global_zero:
         print(
-            f"Test epoch {epoch}: Average losses:"
+            f"\033[95mTest epoch {epoch}: Average losses:"
             f"\tLoss: {loss.avg:.3f} |"
             f"\tMSE loss: {mse_loss.avg:.3f} |"
             f"\tBpp loss: {bpp_loss.avg:.2f} |"
-            f"\tAux loss: {aux_loss.avg:.2f}\n"
+            f"\tAux loss: {aux_loss.avg:.2f}\n\033[0m"
         )
 
     return loss.avg
@@ -322,7 +322,7 @@ def main(argv):
     best_loss = float("inf")
     for epoch in range(last_epoch, args.epochs):
         if fabric.is_global_zero:
-            print(f"Learning rate: {optimizer.param_groups[0]['lr']}")
+            print(f"\033[95mLearning rate: {optimizer.param_groups[0]['lr']}\033[0m")
         train_one_epoch(
             fabric,
             net,

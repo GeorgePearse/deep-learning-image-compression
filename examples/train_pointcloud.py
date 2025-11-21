@@ -111,14 +111,14 @@ def train_one_epoch(
 
         if i % 10 == 0:
             print(
-                f"Train epoch {epoch}: ["
-                f"{i*len(d)}/{len(train_dataloader.dataset)} "
-                f"({100. * i / len(train_dataloader):.0f}%)] "
-                f'Loss: {out_criterion["loss"].item():.3f} | '
-                f'Bpp loss: {out_criterion["bpp_loss"].item():.3f} | '
-                f'Rec loss: {out_criterion["rec_loss"].item():.4f} | '
+                f"\033[34mTrain epoch {epoch}: ["
+                f"{i * len(d)}/{len(train_dataloader.dataset)} "
+                f"({100.0 * i / len(train_dataloader):.0f}%)] "
+                f"Loss: {out_criterion['loss'].item():.3f} | "
+                f"Bpp loss: {out_criterion['bpp_loss'].item():.3f} | "
+                f"Rec loss: {out_criterion['rec_loss'].item():.4f} | "
                 # f'Aux loss: {aux_loss.item():.0f} | '
-                "\n"
+                "\n\033[0m"
             )
 
 
@@ -143,12 +143,12 @@ def test_epoch(epoch, test_dataloader, model, criterion):
                     meters[key].update(out_criterion[key])
 
     print(
-        f"Test epoch {epoch}: Average losses: "
-        f'Loss: {meters["loss"].avg:.3f} | '
-        f'Bpp loss: {meters["bpp_loss"].avg:.3f} | '
-        f'Rec loss: {meters["rec_loss"].avg:.4f} | '
+        f"\033[95mTest epoch {epoch}: Average losses: "
+        f"Loss: {meters['loss'].avg:.3f} | "
+        f"Bpp loss: {meters['bpp_loss'].avg:.3f} | "
+        f"Rec loss: {meters['rec_loss'].avg:.4f} | "
         # f'Aux loss: {meters["aux_loss"].avg:.0f} | '
-        "\n"
+        "\n\033[0m"
     )
 
     return meters["loss"].avg
@@ -333,7 +333,7 @@ def main(argv):
 
     best_loss = float("inf")
     for epoch in range(last_epoch, args.epochs):
-        print(f"Learning rate: {optimizer.param_groups[0]['lr']}")
+        print(f"\033[95mLearning rate: {optimizer.param_groups[0]['lr']}\033[0m")
         train_one_epoch(
             net,
             criterion,
