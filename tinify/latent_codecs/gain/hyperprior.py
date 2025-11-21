@@ -27,7 +27,10 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from typing import Any, Dict, List, Mapping, Tuple
+from __future__ import annotations
+
+from collections.abc import Mapping
+from typing import Any
 
 from torch import Tensor
 
@@ -92,7 +95,11 @@ class GainHyperpriorLatentCodec(LatentCodec):
      - entropy bottleneck ``hyper`` (default) and autoregressive ``y``
     """
 
-    def __init__(self, latent_codec: Mapping[str, LatentCodec], **kwargs):
+    latent_codec: Mapping[str, LatentCodec]
+    y: LatentCodec
+    hyper: LatentCodec
+
+    def __init__(self, latent_codec: Mapping[str, LatentCodec], **kwargs: Any) -> None:
         super().__init__()
         self.y = latent_codec["y"]
         self.hyper = latent_codec["hyper"]
@@ -108,7 +115,7 @@ class GainHyperpriorLatentCodec(LatentCodec):
         z_gain: Tensor,
         y_gain_inv: Tensor,
         z_gain_inv: Tensor,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         hyper_out = self.latent_codec["hyper"](y, z_gain, z_gain_inv)
         y_out = self.latent_codec["y"](y * y_gain, hyper_out["params"])
         y_hat = y_out["y_hat"] * y_gain_inv
@@ -127,7 +134,7 @@ class GainHyperpriorLatentCodec(LatentCodec):
         z_gain: Tensor,
         y_gain_inv: Tensor,
         z_gain_inv: Tensor,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         hyper_out = self.latent_codec["hyper"].compress(y, z_gain, z_gain_inv)
         y_out = self.latent_codec["y"].compress(y * y_gain, hyper_out["params"])
         y_hat = y_out["y_hat"] * y_gain_inv
@@ -139,12 +146,12 @@ class GainHyperpriorLatentCodec(LatentCodec):
 
     def decompress(
         self,
-        strings: List[List[bytes]],
-        shape: Dict[str, Tuple[int, ...]],
+        strings: list[list[bytes]],
+        shape: dict[str, tuple[int, ...]],
         y_gain_inv: Tensor,
         z_gain_inv: Tensor,
-        **kwargs,
-    ) -> Dict[str, Any]:
+        **kwargs: Any,
+    ) -> dict[str, Any]:
         *y_strings_, z_strings = strings
         assert all(len(y_strings) == len(z_strings) for y_strings in y_strings_)
         hyper_out = self.latent_codec["hyper"].decompress(

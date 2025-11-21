@@ -27,12 +27,15 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import random
+from __future__ import annotations
 
+import random
 from pathlib import Path
+from typing import Callable
 
 import numpy as np
 import torch
+from torch import Tensor
 
 from PIL import Image
 from torch.utils.data import Dataset
@@ -41,7 +44,7 @@ from tinify.registry import register_dataset
 
 
 @register_dataset("VideoFolder")
-class VideoFolder(Dataset):
+class VideoFolder(Dataset[tuple[Tensor, ...]]):
     """Load a video folder database. Training and testing video clips
     are stored in a directorie containing mnay sub-directorie like Vimeo90K Dataset:
 
@@ -75,14 +78,20 @@ class VideoFolder(Dataset):
         split (string): split mode ('train' or 'test')
     """
 
+    sample_folders: list[Path]
+    max_frames: int
+    rnd_interval: bool
+    rnd_temp_order: bool
+    transform: Callable[[np.ndarray], Tensor]
+
     def __init__(
         self,
-        root,
-        rnd_interval=False,
-        rnd_temp_order=False,
-        transform=None,
-        split="train",
-    ):
+        root: str | Path,
+        rnd_interval: bool = False,
+        rnd_temp_order: bool = False,
+        transform: Callable[[np.ndarray], Tensor] | None = None,
+        split: str = "train",
+    ) -> None:
         if transform is None:
             raise RuntimeError("Transform must be applied")
 
@@ -103,7 +112,7 @@ class VideoFolder(Dataset):
         self.rnd_temp_order = rnd_temp_order
         self.transform = transform
 
-    def __getitem__(self, index):
+    def __getitem__(self, index: int) -> tuple[Tensor, ...]:
         """
         Args:
             index (int): Index
@@ -130,5 +139,5 @@ class VideoFolder(Dataset):
 
         return frames
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.sample_folders)

@@ -1,8 +1,7 @@
-from typing import Tuple, Union
+from __future__ import annotations
 
 import torch
 import torch.nn.functional as F
-
 from torch import Tensor
 
 YCBCR_WEIGHTS = {
@@ -66,9 +65,9 @@ def ycbcr2rgb(ycbcr: Tensor) -> Tensor:
 
 
 def yuv_444_to_420(
-    yuv: Union[Tensor, Tuple[Tensor, Tensor, Tensor]],
+    yuv: Tensor | tuple[Tensor, Tensor, Tensor],
     mode: str = "avg_pool",
-) -> Tuple[Tensor, Tensor, Tensor]:
+) -> tuple[Tensor, Tensor, Tensor]:
     """Convert a 444 tensor to a 420 representation.
 
     Args:
@@ -86,7 +85,7 @@ def yuv_444_to_420(
 
     if mode == "avg_pool":
 
-        def _downsample(tensor):
+        def _downsample(tensor: Tensor) -> Tensor:
             return F.avg_pool2d(tensor, kernel_size=2, stride=2)
 
     if isinstance(yuv, torch.Tensor):
@@ -98,10 +97,10 @@ def yuv_444_to_420(
 
 
 def yuv_420_to_444(
-    yuv: Tuple[Tensor, Tensor, Tensor],
+    yuv: tuple[Tensor, Tensor, Tensor],
     mode: str = "bilinear",
     return_tuple: bool = False,
-) -> Union[Tensor, Tuple[Tensor, Tensor, Tensor]]:
+) -> Tensor | tuple[Tensor, Tensor, Tensor]:
     """Convert a 420 input to a 444 representation.
 
     Args:
@@ -127,7 +126,7 @@ def yuv_420_to_444(
     if mode != "nearest":
         kwargs = {"align_corners": False}
 
-    def _upsample(tensor):
+    def _upsample(tensor: Tensor) -> Tensor:
         return F.interpolate(tensor, scale_factor=2, mode=mode, **kwargs)
 
     y, u, v = yuv

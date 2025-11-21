@@ -27,6 +27,8 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
 import torch.nn as nn
 
 from torch import Tensor
@@ -35,7 +37,19 @@ from tinify.layers.basic import Interleave, Reshape, Transpose
 
 
 class UpsampleBlock(nn.Module):
-    def __init__(self, D, E, M, P, S, i, extra_in_ch=3, groups=(1, 1)):
+    block: nn.Sequential
+
+    def __init__(
+        self,
+        D: list[int],
+        E: list[int],
+        M: list[int],
+        P: list[int],
+        S: list[int],
+        i: int,
+        extra_in_ch: int = 3,
+        groups: tuple[int, int] = (1, 1),
+    ) -> None:
         super().__init__()
         self.block = nn.Sequential(
             nn.Conv1d(

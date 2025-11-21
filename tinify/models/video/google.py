@@ -27,15 +27,17 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
 import math
 
-from typing import List
+from typing import Any
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from torch import amp
+from torch import Tensor, amp
 
 from tinify.entropy_models import EntropyBottleneck, GaussianConditional
 from tinify.layers import QReLU
@@ -207,8 +209,8 @@ class ScaleSpaceFlow(CompressionModel):
         self.num_levels = num_levels
         self.scale_field_shift = scale_field_shift
 
-    def forward(self, frames):
-        if not isinstance(frames, List):
+    def forward(self, frames: list[Tensor]) -> dict[str, Any]:
+        if not isinstance(frames, list):
             raise RuntimeError(f"Invalid number of frames: {len(frames)}.")
 
         reconstructions = []
@@ -230,26 +232,30 @@ class ScaleSpaceFlow(CompressionModel):
             "likelihoods": frames_likelihoods,
         }
 
-    def forward_keyframe(self, x):
+    def forward_keyframe(self, x: Tensor) -> tuple[Tensor, dict[str, Any]]:
         y = self.img_encoder(x)
         y_hat, likelihoods = self.img_hyperprior(y)
         x_hat = self.img_decoder(y_hat)
         return x_hat, {"keyframe": likelihoods}
 
-    def encode_keyframe(self, x):
+    def encode_keyframe(self, x: Tensor) -> tuple[Tensor, dict[str, Any]]:
         y = self.img_encoder(x)
         y_hat, out_keyframe = self.img_hyperprior.compress(y)
         x_hat = self.img_decoder(y_hat)
 
         return x_hat, out_keyframe
 
-    def decode_keyframe(self, strings, shape):
+    def decode_keyframe(
+        self, strings: list[list[bytes]], shape: tuple[int, ...]
+    ) -> Tensor:
         y_hat = self.img_hyperprior.decompress(strings, shape)
         x_hat = self.img_decoder(y_hat)
 
         return x_hat
 
-    def forward_inter(self, x_cur, x_ref):
+    def forward_inter(
+        self, x_cur: Tensor, x_ref: Tensor
+    ) -> tuple[Tensor, dict[str, Any]]:
         # encode the motion information
         x = torch.cat((x_cur, x_ref), dim=1)
         y_motion = self.motion_encoder(x)
@@ -273,7 +279,9 @@ class ScaleSpaceFlow(CompressionModel):
 
         return x_rec, {"motion": motion_likelihoods, "residual": res_likelihoods}
 
-    def encode_inter(self, x_cur, x_ref):
+    def encode_inter(
+        self, x_cur: Tensor, x_ref: Tensor
+    ) -> tuple[Tensor, dict[str, Any]]:
         # encode the motion information
         x = torch.cat((x_cur, x_ref), dim=1)
         y_motion = self.motion_encoder(x)
@@ -303,7 +311,12 @@ class ScaleSpaceFlow(CompressionModel):
             "shape": {"motion": out_motion["shape"], "residual": out_res["shape"]},
         }
 
-    def decode_inter(self, x_ref, strings, shapes):
+    def decode_inter(
+        self,
+        x_ref: Tensor,
+        strings: dict[str, list[list[bytes]]],
+        shapes: dict[str, tuple[int, ...]],
+    ) -> Tensor:
         key = "motion"
         y_motion_hat = self.motion_hyperprior.decompress(strings[key], shapes[key])
 
@@ -325,7 +338,7 @@ class ScaleSpaceFlow(CompressionModel):
         return x_rec
 
     @staticmethod
-    def gaussian_volume(x, sigma: float, num_levels: int):
+    def gaussian_volume(x: Tensor, sigma: float, num_levels: int) -> Tensor:
         """Efficient gaussian volume construction.
 
         From: "Generative Video Compression as Hierarchical Variational Inference",
@@ -350,7 +363,13 @@ class ScaleSpaceFlow(CompressionModel):
             volume.append(interp.unsqueeze(2))
         return torch.cat(volume, dim=2)
 
-    def warp_volume(self, volume, flow, scale_field, padding_mode: str = "border"):
+    def warp_volume(
+        self,
+        volume: Tensor,
+        flow: Tensor,
+        scale_field: Tensor,
+        padding_mode: str = "border",
+    ) -> Tensor:
         """3D volume warping."""
         if volume.ndimension() != 5:
             raise ValueError(
@@ -373,25 +392,25 @@ class ScaleSpaceFlow(CompressionModel):
             )
         return out.squeeze(2)
 
-    def forward_prediction(self, x_ref, motion_info):
+    def forward_prediction(self, x_ref: Tensor, motion_info: Tensor) -> Tensor:
         flow, scale_field = motion_info.chunk(2, dim=1)
 
         volume = self.gaussian_volume(x_ref, self.sigma0, self.num_levels)
         x_pred = self.warp_volume(volume, flow, scale_field)
         return x_pred
 
-    def aux_loss(self):
+    def aux_loss(self) -> list[Tensor]:
         """Return a list of the auxiliary entropy bottleneck over module(s)."""
 
-        aux_loss_list = []
+        aux_loss_list: list[Tensor] = []
         for m in self.modules():
             if isinstance(m, CompressionModel) and m is not self:
                 aux_loss_list.append(m.aux_loss())
 
         return aux_loss_list
 
-    def compress(self, frames):
-        if not isinstance(frames, List):
+    def compress(self, frames: list[Tensor]) -> tuple[list[Any], list[Any]]:
+        if not isinstance(frames, list):
             raise RuntimeError(f"Invalid number of frames: {len(frames)}.")
 
         frame_strings = []
@@ -411,8 +430,8 @@ class ScaleSpaceFlow(CompressionModel):
 
         return frame_strings, shape_infos
 
-    def decompress(self, strings, shapes):
-        if not isinstance(strings, List) or not isinstance(shapes, List):
+    def decompress(self, strings: list[Any], shapes: list[Any]) -> list[Tensor]:
+        if not isinstance(strings, list) or not isinstance(shapes, list):
             raise RuntimeError(f"Invalid number of frames: {len(strings)}.")
 
         assert len(strings) == len(
@@ -433,7 +452,7 @@ class ScaleSpaceFlow(CompressionModel):
         return dec_frames
 
     @classmethod
-    def from_state_dict(cls, state_dict):
+    def from_state_dict(cls, state_dict: dict[str, Any]) -> ScaleSpaceFlow:
         """Return a new model instance from `state_dict`."""
         net = cls()
         net.load_state_dict(state_dict)

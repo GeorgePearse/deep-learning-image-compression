@@ -27,12 +27,20 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import torch
+from __future__ import annotations
 
+import torch
 from torch import Tensor
 
 
-def compute_padding(in_h: int, in_w: int, *, out_h=None, out_w=None, min_div=1):
+def compute_padding(
+    in_h: int,
+    in_w: int,
+    *,
+    out_h: int | None = None,
+    out_w: int | None = None,
+    min_div: int = 1,
+) -> tuple[tuple[int, int, int, int], tuple[int, int, int, int]]:
     """Returns tuples for padding and unpadding.
 
     Args:
@@ -52,13 +60,13 @@ def compute_padding(in_h: int, in_w: int, *, out_h=None, out_w=None, min_div=1):
             f"Padded output height and width are not divisible by min_div={min_div}."
         )
 
-    left = (out_w - in_w) // 2
-    right = out_w - in_w - left
-    top = (out_h - in_h) // 2
-    bottom = out_h - in_h - top
+    left: int = (out_w - in_w) // 2
+    right: int = out_w - in_w - left
+    top: int = (out_h - in_h) // 2
+    bottom: int = out_h - in_h - top
 
-    pad = (left, right, top, bottom)
-    unpad = (-left, -right, -top, -bottom)
+    pad: tuple[int, int, int, int] = (left, right, top, bottom)
+    unpad: tuple[int, int, int, int] = (-left, -right, -top, -bottom)
 
     return pad, unpad
 

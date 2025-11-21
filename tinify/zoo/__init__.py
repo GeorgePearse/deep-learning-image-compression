@@ -27,6 +27,12 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
+from typing import Any, Callable
+
+import torch.nn as nn
+
 from .image import (
     bmshj2018_factorized,
     bmshj2018_factorized_relu,
@@ -40,7 +46,10 @@ from .image_vbr import bmshj2018_hyperprior_vbr, mbt2018_mean_vbr, mbt2018_vbr
 from .pretrained import load_pretrained as load_state_dict
 from .video import ssf2020
 
-image_models = {
+# Type alias for model factory functions
+ModelFactory = Callable[..., nn.Module]
+
+image_models: dict[str, ModelFactory] = {
     "bmshj2018-factorized": bmshj2018_factorized,
     "bmshj2018-factorized-relu": bmshj2018_factorized_relu,
     "bmshj2018-hyperprior": bmshj2018_hyperprior,
@@ -54,17 +63,17 @@ image_models = {
 }
 
 # Not yet available.
-pointcloud_models = {
+pointcloud_models: dict[str, ModelFactory | None] = {
     "hrtzxf2022-pcc-rec": None,
     "sfu2023-pcc-rec-pointnet": None,
     "sfu2024-pcc-rec-pointnet2-ssg": None,
 }
 
-video_models = {
+video_models: dict[str, ModelFactory] = {
     "ssf2020": ssf2020,
 }
 
-models = {}
+models: dict[str, ModelFactory | None] = {}
 models.update(image_models)
 models.update(pointcloud_models)
 models.update(video_models)

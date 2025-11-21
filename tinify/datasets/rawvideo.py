@@ -27,11 +27,12 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
 import enum
 import re
-
 from fractions import Fraction
-from typing import Any, Dict, Sequence, Union
+from typing import Any, Sequence
 
 import numpy as np
 
@@ -45,7 +46,7 @@ class VideoFormat(enum.Enum):
 
 
 # Table of "fourcc" formats from Vooya, GStreamer, and ffmpeg mapped to a normalized enum value.
-video_formats = {
+video_formats: dict[str, VideoFormat] = {
     "yuv400": VideoFormat.YUV400,
     "yuv420": VideoFormat.YUV420,
     "420": VideoFormat.YUV420,
@@ -61,21 +62,21 @@ video_formats = {
 }
 
 
-framerate_to_fraction = {
+framerate_to_fraction: dict[str, Fraction] = {
     "23.98": Fraction(24000, 1001),
     "23.976": Fraction(24000, 1001),
     "29.97": Fraction(30000, 1001),
     "59.94": Fraction(60000, 1001),
 }
 
-file_extensions = {
+file_extensions: set[str] = {
     "yuv",
     "rgb",
     "raw",
 }
 
 
-subsampling = {
+subsampling: dict[VideoFormat, tuple[int, int]] = {
     VideoFormat.YUV400: (0, 0),
     VideoFormat.YUV420: (2, 2),
     VideoFormat.YUV422: (2, 1),
@@ -83,7 +84,7 @@ subsampling = {
 }
 
 
-bitdepth_to_dtype = {
+bitdepth_to_dtype: dict[int, type[np.unsignedinteger[Any]]] = {
     8: np.uint8,
     10: np.uint16,
     12: np.uint16,
@@ -92,7 +93,12 @@ bitdepth_to_dtype = {
 }
 
 
-def make_dtype(format, value_type, width, height):
+def make_dtype(
+    format: VideoFormat,
+    value_type: type[np.unsignedinteger[Any]],
+    width: int,
+    height: int,
+) -> np.dtype[Any]:
     # Use float division with rounding to account for oddly sized Y planes
     # and even sized U and V planes to match ffmpeg.
 
@@ -120,14 +126,14 @@ def make_dtype(format, value_type, width, height):
     )
 
 
-def get_raw_video_file_info(filename: str) -> Dict[str, Any]:
+def get_raw_video_file_info(filename: str) -> dict[str, Any]:
     """
     Deduce size, framerate, bitdepth, and format from the filename based on the
     Vooya specifcation.
 
     This is defined as follows:
 
-        youNameIt_WIDTHxHEIGHT[_FPS[Hz|fps]][_BITSbit][_(P420|P422|P444|UYVY|YUY2|YUYV|I444)].[rgb|yuv|bw|rgba|bgr|bgra … ]
+        youNameIt_WIDTHxHEIGHT[_FPS[Hz|fps]][_BITSbit][_(P420|P422|P444|UYVY|YUY2|YUYV|I444)].[rgb|yuv|bw|rgba|bgr|bgra ... ]
 
     See: <https://www.offminor.de/vooya-usage.html#vf>
 
@@ -143,7 +149,7 @@ def get_raw_video_file_info(filename: str) -> Dict[str, Any]:
     framerate_pattern = r"(?P<framerate>[\d\.]+)(?:Hz|fps)"
     bitdepth_pattern = r"(?P<bitdepth>\d+)bit"
     formats = "|".join(video_formats.keys())
-    format_pattern = rf"(?P<format>{formats})(?:[p_]?(?:(?P<bitdepth2>\d+)|(?P<chroma_sub>\d{3}[p]))?(?P<endianness>LE|BE))?"
+    format_pattern = rf"(?P<format>{formats})(?:[p_]?(?:(?P<bitdepth2>\d+)|(?P<chroma_sub>\d{{3}}[p]))?(?P<endianness>LE|BE))?"
     extension_pattern = rf"(?P<extension>{'|'.join(file_extensions)})"
     cut_pattern = "([0-9]+)-([0-9]+)"
 
@@ -155,7 +161,7 @@ def get_raw_video_file_info(filename: str) -> Dict[str, Any]:
         cut_pattern,
         extension_pattern,
     )
-    info: Dict[str, Any] = {}
+    info: dict[str, Any] = {}
     for pattern in patterns:
         match = re.search(pattern, filename)
         if match:
@@ -174,7 +180,7 @@ def get_raw_video_file_info(filename: str) -> Dict[str, Any]:
         info["bitdepth"] = info["bitdepth2"]
     del info["bitdepth2"]
 
-    outinfo: Dict[str, Union[str, int, float, Fraction, VideoFormat]] = {}
+    outinfo: dict[str, str | int | float | Fraction | VideoFormat] = {}
     outinfo.update(info)
 
     # Normalize the format
@@ -198,7 +204,13 @@ def get_raw_video_file_info(filename: str) -> Dict[str, Any]:
     return outinfo
 
 
-def get_num_frms(file_size, width, height, video_format, dtype):
+def get_num_frms(
+    file_size: int,
+    width: int,
+    height: int,
+    video_format: VideoFormat,
+    dtype: type[np.unsignedinteger[Any]],
+) -> int:
     w_sub, h_sub = subsampling[video_format]
     itemsize = np.array([0], dtype=dtype).itemsize
 
@@ -225,6 +237,15 @@ class RawVideoSequence(Sequence[np.ndarray]):
         framerate: Video framerate, if not given it may be deduced from the filename.
     """
 
+    width: int
+    height: int
+    bitdepth: int
+    framerate: int | Fraction | None
+    format: VideoFormat
+    dtype: np.dtype[Any]
+    data: np.ndarray
+    total_frms: int
+
     def __init__(
         self,
         mmap: np.memmap,
@@ -232,8 +253,8 @@ class RawVideoSequence(Sequence[np.ndarray]):
         height: int,
         bitdepth: int,
         format: VideoFormat,
-        framerate: int,
-    ):
+        framerate: int | Fraction | None,
+    ) -> None:
         self.width = width
         self.height = height
         self.bitdepth = bitdepth
@@ -253,9 +274,7 @@ class RawVideoSequence(Sequence[np.ndarray]):
         self.total_frms = get_num_frms(mmap.size, width, height, format, value_type)
 
     @classmethod
-    def new_like(
-        cls, sequence: "RawVideoSequence", filename: str
-    ) -> "RawVideoSequence":
+    def new_like(cls, sequence: RawVideoSequence, filename: str) -> RawVideoSequence:
         mmap = np.memmap(filename, dtype=bitdepth_to_dtype[sequence.bitdepth], mode="r")
         return cls(
             mmap,
@@ -270,12 +289,12 @@ class RawVideoSequence(Sequence[np.ndarray]):
     def from_file(
         cls,
         filename: str,
-        width: int = None,
-        height: int = None,
-        bitdepth: int = None,
-        format: VideoFormat = None,
-        framerate: int = None,
-    ) -> "RawVideoSequence":
+        width: int | None = None,
+        height: int | None = None,
+        bitdepth: int | None = None,
+        format: VideoFormat | None = None,
+        framerate: int | Fraction | None = None,
+    ) -> RawVideoSequence:
         """
         Loads a raw video file from the given filename.
 
@@ -312,11 +331,11 @@ class RawVideoSequence(Sequence[np.ndarray]):
             framerate=framerate,
         )
 
-    def __getitem__(self, index: Union[int, slice]) -> Any:
+    def __getitem__(self, index: int | slice) -> Any:
         return self.data[index]
 
     def __len__(self) -> int:
         return len(self.data)
 
-    def close(self):
+    def close(self) -> None:
         del self.data

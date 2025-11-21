@@ -27,10 +27,11 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from typing import Any, Dict, List
+from __future__ import annotations
+
+from typing import Any
 
 import torch.nn as nn
-
 from torch import Tensor
 
 __all__ = [
@@ -39,13 +40,13 @@ __all__ = [
 
 
 class LatentCodec(nn.Module):
-    def forward(self, y: Tensor, *args, **kwargs) -> Dict[str, Any]:
+    def forward(self, y: Tensor, *args: Any, **kwargs: Any) -> dict[str, Any]:
         raise NotImplementedError
 
-    def compress(self, y: Tensor, *args, **kwargs) -> Dict[str, Any]:
+    def compress(self, y: Tensor, *args: Any, **kwargs: Any) -> dict[str, Any]:
         raise NotImplementedError
 
     def decompress(
-        self, strings: List[List[bytes]], shape: Any, *args, **kwargs
-    ) -> Dict[str, Any]:
+        self, strings: list[list[bytes]], shape: Any, *args: Any, **kwargs: Any
+    ) -> dict[str, Any]:
         raise NotImplementedError

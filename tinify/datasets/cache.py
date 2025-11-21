@@ -27,11 +27,13 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
 import json
 import os
 import os.path
-
 from pathlib import Path
+from typing import Any, Callable
 
 import numpy as np
 
@@ -39,37 +41,42 @@ from torch.utils.data import Dataset
 from tqdm import tqdm
 
 
-class CacheDataset(Dataset):
+class CacheDataset(Dataset[dict[str, Any]]):
+    _CacheDataset__cache_root: Path
+    pre_transform: Callable[[dict[str, Any]], dict[str, Any]] | None
+    transform: Callable[[dict[str, Any]], dict[str, Any]] | None
+    _store: dict[str, np.memmap]
+
     def __init__(
         self,
-        cache_root=None,
-        pre_transform=None,
-        transform=None,
-    ):
+        cache_root: str | Path | None = None,
+        pre_transform: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        transform: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+    ) -> None:
         self.__cache_root = Path(cache_root)
         self.pre_transform = pre_transform
         self.transform = transform
         self._store = {}
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self._store[next(iter(self._store))])
 
-    def __getitem__(self, index):
+    def __getitem__(self, index: int) -> dict[str, Any]:
         data = {k: v[index].copy() for k, v in self._store.items()}
         if self.transform is not None:
             data = self.transform(data)
         return data
 
-    def _ensure_cache(self):
+    def _ensure_cache(self) -> None:
         try:
             self._load_cache(mode="r")
         except FileNotFoundError:
             self._generate_cache()
             self._load_cache(mode="r")
 
-    def _load_cache(self, mode):
+    def _load_cache(self, mode: str) -> None:
         with open(self.__cache_root / "info.json", "r") as f:
-            info = json.load(f)
+            info: dict[str, dict[str, Any]] = json.load(f)
 
         self._store = {
             k: np.memmap(
@@ -81,7 +88,7 @@ class CacheDataset(Dataset):
             for k, settings in info.items()
         }
 
-    def _generate_cache(self, verbose=True):
+    def _generate_cache(self, verbose: bool = True) -> None:
         if verbose:
             print(f"Generating cache at {self.__cache_root}...")
 
@@ -103,7 +110,7 @@ class CacheDataset(Dataset):
             for k, v in data.items():
                 self._store[k][i] = v
 
-    def _write_cache_info(self, num_samples, data):
+    def _write_cache_info(self, num_samples: int, data: dict[str, Any]) -> None:
         info = {
             k: {
                 "dtype": _removeprefix(str(v.dtype), "torch."),
@@ -115,10 +122,10 @@ class CacheDataset(Dataset):
         with open(self.__cache_root / "info.json", "w") as f:
             json.dump(info, f, indent=2)
 
-    def _get_items(self):
+    def _get_items(self) -> list[Any]:
         raise NotImplementedError
 
-    def _load_item(self, item):
+    def _load_item(self, item: Any) -> dict[str, Any]:
         raise NotImplementedError
 
 

@@ -27,11 +27,17 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
 import warnings
+
+from typing import Any
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
+from torch import Tensor
 
 from tinify.ans import BufferedRansEncoder, RansDecoder
 from tinify.entropy_models import EntropyBottleneck, GaussianConditional
@@ -98,7 +104,12 @@ class FactorizedPrior(CompressionModel):
             encoder and last layer of the hyperprior decoder)
     """
 
-    def __init__(self, N, M, **kwargs):
+    N: int
+    M: int
+    g_a: nn.Module
+    g_s: nn.Module
+
+    def __init__(self, N: int, M: int, **kwargs: Any) -> None:
         super().__init__(**kwargs)
 
         self.entropy_bottleneck = EntropyBottleneck(M)
@@ -130,7 +141,7 @@ class FactorizedPrior(CompressionModel):
     def downsampling_factor(self) -> int:
         return 2**4
 
-    def forward(self, x):
+    def forward(self, x: Tensor) -> dict[str, Any]:
         y = self.g_a(x)
         y_hat, y_likelihoods = self.entropy_bottleneck(y)
         x_hat = self.g_s(y_hat)
@@ -143,7 +154,7 @@ class FactorizedPrior(CompressionModel):
         }
 
     @classmethod
-    def from_state_dict(cls, state_dict):
+    def from_state_dict(cls, state_dict: dict[str, Any]) -> FactorizedPrior:
         """Return a new model instance from `state_dict`."""
         N = state_dict["g_a.0.weight"].size(0)
         M = state_dict["g_a.6.weight"].size(0)
@@ -151,12 +162,14 @@ class FactorizedPrior(CompressionModel):
         net.load_state_dict(state_dict)
         return net
 
-    def compress(self, x):
+    def compress(self, x: Tensor) -> dict[str, Any]:
         y = self.g_a(x)
         y_strings = self.entropy_bottleneck.compress(y)
         return {"strings": [y_strings], "shape": y.size()[-2:]}
 
-    def decompress(self, strings, shape):
+    def decompress(
+        self, strings: list[list[bytes]], shape: tuple[int, ...]
+    ) -> dict[str, Tensor]:
         assert isinstance(strings, list) and len(strings) == 1
         y_hat = self.entropy_bottleneck.decompress(strings[0], shape)
         x_hat = self.g_s(y_hat).clamp_(0, 1)
@@ -177,7 +190,7 @@ class FactorizedPriorReLU(FactorizedPrior):
             encoder and last layer of the hyperprior decoder)
     """
 
-    def __init__(self, N, M, **kwargs):
+    def __init__(self, N: int, M: int, **kwargs: Any) -> None:
         super().__init__(N=N, M=M, **kwargs)
 
         self.g_a = nn.Sequential(
@@ -239,7 +252,11 @@ class ScaleHyperprior(CompressionModel):
             encoder and last layer of the hyperprior decoder)
     """
 
-    def __init__(self, N, M, **kwargs):
+    h_a: nn.Module
+    h_s: nn.Module
+    gaussian_conditional: GaussianConditional
+
+    def __init__(self, N: int, M: int, **kwargs: Any) -> None:
         super().__init__(**kwargs)
 
         self.entropy_bottleneck = EntropyBottleneck(N)
@@ -289,7 +306,7 @@ class ScaleHyperprior(CompressionModel):
     def downsampling_factor(self) -> int:
         return 2 ** (4 + 2)
 
-    def forward(self, x):
+    def forward(self, x: Tensor) -> dict[str, Any]:
         y = self.g_a(x)
         z = self.h_a(torch.abs(y))
         z_hat, z_likelihoods = self.entropy_bottleneck(z)
@@ -303,7 +320,7 @@ class ScaleHyperprior(CompressionModel):
         }
 
     @classmethod
-    def from_state_dict(cls, state_dict):
+    def from_state_dict(cls, state_dict: dict[str, Any]) -> ScaleHyperprior:
         """Return a new model instance from `state_dict`."""
         N = state_dict["g_a.0.weight"].size(0)
         M = state_dict["g_a.6.weight"].size(0)
@@ -311,7 +328,7 @@ class ScaleHyperprior(CompressionModel):
         net.load_state_dict(state_dict)
         return net
 
-    def compress(self, x):
+    def compress(self, x: Tensor) -> dict[str, Any]:
         y = self.g_a(x)
         z = self.h_a(torch.abs(y))
 
@@ -323,7 +340,9 @@ class ScaleHyperprior(CompressionModel):
         y_strings = self.gaussian_conditional.compress(y, indexes)
         return {"strings": [y_strings, z_strings], "shape": z.size()[-2:]}
 
-    def decompress(self, strings, shape):
+    def decompress(
+        self, strings: list[list[bytes]], shape: tuple[int, ...]
+    ) -> dict[str, Tensor]:
         assert isinstance(strings, list) and len(strings) == 2
         z_hat = self.entropy_bottleneck.decompress(strings[1], shape)
         scales_hat = self.h_s(z_hat)
@@ -371,7 +390,7 @@ class MeanScaleHyperprior(ScaleHyperprior):
             encoder and last layer of the hyperprior decoder)
     """
 
-    def __init__(self, N, M, **kwargs):
+    def __init__(self, N: int, M: int, **kwargs: Any) -> None:
         super().__init__(N=N, M=M, **kwargs)
 
         self.h_a = nn.Sequential(
@@ -390,7 +409,7 @@ class MeanScaleHyperprior(ScaleHyperprior):
             conv(M * 3 // 2, M * 2, stride=1, kernel_size=3),
         )
 
-    def forward(self, x):
+    def forward(self, x: Tensor) -> dict[str, Any]:
         y = self.g_a(x)
         z = self.h_a(y)
         z_hat, z_likelihoods = self.entropy_bottleneck(z)
@@ -404,7 +423,7 @@ class MeanScaleHyperprior(ScaleHyperprior):
             "likelihoods": {"y": y_likelihoods, "z": z_likelihoods},
         }
 
-    def compress(self, x):
+    def compress(self, x: Tensor) -> dict[str, Any]:
         y = self.g_a(x)
         z = self.h_a(y)
 
@@ -417,7 +436,9 @@ class MeanScaleHyperprior(ScaleHyperprior):
         y_strings = self.gaussian_conditional.compress(y, indexes, means=means_hat)
         return {"strings": [y_strings, z_strings], "shape": z.size()[-2:]}
 
-    def decompress(self, strings, shape):
+    def decompress(
+        self, strings: list[list[bytes]], shape: tuple[int, ...]
+    ) -> dict[str, Tensor]:
         assert isinstance(strings, list) and len(strings) == 2
         z_hat = self.entropy_bottleneck.decompress(strings[1], shape)
         gaussian_params = self.h_s(z_hat)
@@ -472,7 +493,10 @@ class JointAutoregressiveHierarchicalPriors(MeanScaleHyperprior):
             encoder and last layer of the hyperprior decoder)
     """
 
-    def __init__(self, N=192, M=192, **kwargs):
+    entropy_parameters: nn.Module
+    context_prediction: MaskedConv2d
+
+    def __init__(self, N: int = 192, M: int = 192, **kwargs: Any) -> None:
         super().__init__(N=N, M=M, **kwargs)
 
         self.g_a = nn.Sequential(
@@ -531,7 +555,7 @@ class JointAutoregressiveHierarchicalPriors(MeanScaleHyperprior):
     def downsampling_factor(self) -> int:
         return 2 ** (4 + 2)
 
-    def forward(self, x):
+    def forward(self, x: Tensor) -> dict[str, Any]:
         y = self.g_a(x)
         z = self.h_a(y)
         z_hat, z_likelihoods = self.entropy_bottleneck(z)
@@ -554,7 +578,9 @@ class JointAutoregressiveHierarchicalPriors(MeanScaleHyperprior):
         }
 
     @classmethod
-    def from_state_dict(cls, state_dict):
+    def from_state_dict(
+        cls, state_dict: dict[str, Any]
+    ) -> JointAutoregressiveHierarchicalPriors:
         """Return a new model instance from `state_dict`."""
         N = state_dict["g_a.0.weight"].size(0)
         M = state_dict["g_a.6.weight"].size(0)
@@ -562,7 +588,7 @@ class JointAutoregressiveHierarchicalPriors(MeanScaleHyperprior):
         net.load_state_dict(state_dict)
         return net
 
-    def compress(self, x):
+    def compress(self, x: Tensor) -> dict[str, Any]:
         if next(self.parameters()).device != torch.device("cpu"):
             warnings.warn(
                 "Inference on GPU is not recommended for the autoregressive "
@@ -601,7 +627,15 @@ class JointAutoregressiveHierarchicalPriors(MeanScaleHyperprior):
 
         return {"strings": [y_strings, z_strings], "shape": z.size()[-2:]}
 
-    def _compress_ar(self, y_hat, params, height, width, kernel_size, padding):
+    def _compress_ar(
+        self,
+        y_hat: Tensor,
+        params: Tensor,
+        height: int,
+        width: int,
+        kernel_size: int,
+        padding: int,
+    ) -> bytes:
         cdf = self.gaussian_conditional.quantized_cdf.tolist()
         cdf_lengths = self.gaussian_conditional.cdf_length.tolist()
         offsets = self.gaussian_conditional.offset.tolist()
@@ -645,7 +679,9 @@ class JointAutoregressiveHierarchicalPriors(MeanScaleHyperprior):
         string = encoder.flush()
         return string
 
-    def decompress(self, strings, shape):
+    def decompress(
+        self, strings: list[list[bytes]], shape: tuple[int, ...]
+    ) -> dict[str, Tensor]:
         assert isinstance(strings, list) and len(strings) == 2
 
         if next(self.parameters()).device != torch.device("cpu"):
@@ -691,8 +727,15 @@ class JointAutoregressiveHierarchicalPriors(MeanScaleHyperprior):
         return {"x_hat": x_hat}
 
     def _decompress_ar(
-        self, y_string, y_hat, params, height, width, kernel_size, padding
-    ):
+        self,
+        y_string: bytes,
+        y_hat: Tensor,
+        params: Tensor,
+        height: int,
+        width: int,
+        kernel_size: int,
+        padding: int,
+    ) -> None:
         cdf = self.gaussian_conditional.quantized_cdf.tolist()
         cdf_lengths = self.gaussian_conditional.cdf_length.tolist()
         offsets = self.gaussian_conditional.offset.tolist()

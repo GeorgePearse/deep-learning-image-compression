@@ -27,7 +27,9 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from typing import Callable
+from __future__ import annotations
+
+from typing import Any, Callable, TypeAlias
 
 from .torch import (
     TCriterion,
@@ -50,4 +52,4 @@ __all__ = [
     "TTransform",
 ]
 
-TTransform = Callable
+TTransform: TypeAlias = Callable[..., Any]

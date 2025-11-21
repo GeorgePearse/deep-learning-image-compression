@@ -29,8 +29,12 @@
 
 from __future__ import annotations
 
+from typing import Any, Callable
+
 import torch
 import torch.nn as nn
+
+from torch import Tensor
 
 from tinify.latent_codecs import EntropyBottleneckLatentCodec
 from tinify.layers.basic import Gain, Interleave, Reshape, Transpose
@@ -65,18 +69,34 @@ class PointNet2SsgReconstructionPccModel(CompressionModel):
             by Mateen Ulhaq and Ivan V. Bajić, PCS 2024.
     """
 
+    num_points: int
+    num_classes: int
+    D: tuple[int, ...]
+    P: tuple[int, ...]
+    S: tuple[int | None, ...]
+    R: tuple[float | None, ...]
+    E: tuple[int, ...]
+    M: tuple[int, ...]
+    normal_channel: bool
+    levels: int
+    down: nn.ModuleDict
+    h_a: nn.ModuleDict
+    h_s: nn.ModuleDict
+    up: nn.ModuleDict
+    latent_codec: nn.ModuleDict
+
     def __init__(
         self,
-        num_points=1024,
-        num_classes=40,
-        D=(0, 128, 192, 256),
-        P=(1024, 256, 64, 1),
-        S=(None, 4, 4, 64),
-        R=(None, 0.2, 0.4, None),
-        E=(3, 64, 32, 16, 0),
-        M=(0, 0, 64, 64),
-        normal_channel=False,
-    ):
+        num_points: int = 1024,
+        num_classes: int = 40,
+        D: tuple[int, ...] = (0, 128, 192, 256),
+        P: tuple[int, ...] = (1024, 256, 64, 1),
+        S: tuple[int | None, ...] = (None, 4, 4, 64),
+        R: tuple[float | None, ...] = (None, 0.2, 0.4, None),
+        E: tuple[int, ...] = (3, 64, 32, 16, 0),
+        M: tuple[int, ...] = (0, 0, 64, 64),
+        normal_channel: bool = False,
+    ) -> None:
         """
         Args:
             num_points: Number of input points. [unused]
@@ -210,7 +230,7 @@ class PointNet2SsgReconstructionPccModel(CompressionModel):
             }
         )
 
-    def forward(self, input):
+    def forward(self, input: dict[str, Tensor]) -> dict[str, Any]:
         xyz, norm = self._get_inputs(input)
         y_out_, u_, uu_ = self._compress(xyz, norm, mode="forward")
         x_hat, y_hat_, v_ = self._decompress(y_out_, mode="forward")
@@ -231,7 +251,7 @@ class PointNet2SsgReconstructionPccModel(CompressionModel):
             },
         }
 
-    def compress(self, input):
+    def compress(self, input: dict[str, Tensor]) -> dict[str, Any]:
         xyz, norm = self._get_inputs(input)
         y_out_, _, _ = self._compress(xyz, norm, mode="compress")
 
@@ -244,7 +264,9 @@ class PointNet2SsgReconstructionPccModel(CompressionModel):
             "shape": {f"y_{i}": y_out_[i]["shape"] for i in range(self.levels)},
         }
 
-    def decompress(self, strings, shape):
+    def decompress(
+        self, strings: list[list[bytes]], shape: dict[str, Any]
+    ) -> dict[str, Tensor]:
         y_inputs_ = {
             i: {
                 "strings": [strings[i]],
@@ -259,7 +281,7 @@ class PointNet2SsgReconstructionPccModel(CompressionModel):
             "x_hat": x_hat,
         }
 
-    def _get_inputs(self, input):
+    def _get_inputs(self, input: dict[str, Tensor]) -> tuple[Tensor, Tensor | None]:
         points = input["pos"].transpose(-2, -1)
         if self.normal_channel:
             xyz = points[:, :3, :]
@@ -269,7 +291,9 @@ class PointNet2SsgReconstructionPccModel(CompressionModel):
             norm = None
         return xyz, norm
 
-    def _compress(self, xyz, norm, *, mode):
+    def _compress(
+        self, xyz: Tensor, norm: Tensor | None, *, mode: str
+    ) -> tuple[dict[int, Any], dict[int, Tensor | None], dict[int, Tensor]]:
         lc_func = {"forward": lambda lc: lc, "compress": lambda lc: lc.compress}[mode]
 
         B, _, _ = xyz.shape
@@ -299,11 +323,13 @@ class PointNet2SsgReconstructionPccModel(CompressionModel):
 
         return y_out_, u_, uu_
 
-    def _decompress(self, y_inputs_, *, mode):
-        y_hat_ = {}
-        y_out_ = {}
-        uu_hat_ = {}
-        v_ = {}
+    def _decompress(
+        self, y_inputs_: dict[int, Any], *, mode: str
+    ) -> tuple[Tensor, dict[int, Tensor], dict[int, Tensor]]:
+        y_hat_: dict[int, Tensor] = {}
+        y_out_: dict[int, Any] = {}
+        uu_hat_: dict[int, Tensor] = {}
+        v_: dict[int, Tensor] = {}
 
         for i in reversed(range(0, self.levels)):
             if self.M[i] == 0:

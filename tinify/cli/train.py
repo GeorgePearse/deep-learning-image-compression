@@ -6,17 +6,22 @@
 
 from __future__ import annotations
 
+import copy
+import math
 import random
 import shutil
 import sys
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 import lightning as L
 import torch
-import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader
+from lightning.fabric import Fabric
+from torch import Tensor
+from torch.optim.lr_scheduler import LRScheduler
+from torch.optim.optimizer import Optimizer
+from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 
 from tinify.datasets import ImageFolder, VideoFolder
@@ -31,23 +36,119 @@ from .config import Config
 class AverageMeter:
     """Compute running average."""
 
-    def __init__(self):
+    val: float
+    avg: float
+    sum: float
+    count: int
+
+    def __init__(self) -> None:
         self.reset()
 
-    def reset(self):
-        self.val = 0
-        self.avg = 0
-        self.sum = 0
+    def reset(self) -> None:
+        self.val = 0.0
+        self.avg = 0.0
+        self.sum = 0.0
         self.count = 0
 
-    def update(self, val, n=1):
+    def update(self, val: float | Tensor, n: int = 1) -> None:
+        if isinstance(val, Tensor):
+            val = val.item()
         self.val = val
         self.sum += val * n
         self.count += n
         self.avg = self.sum / self.count
 
 
-def get_model(config: Config):
+class LRFinder:
+    """Learning Rate Finder."""
+
+    fabric: Fabric
+    model: torch.nn.Module
+    optimizer: Optimizer
+    criterion: torch.nn.Module
+    dataloader: DataLoader[Any]
+
+    def __init__(
+        self,
+        fabric: Fabric,
+        model: torch.nn.Module,
+        optimizer: Optimizer,
+        criterion: torch.nn.Module,
+        dataloader: DataLoader[Any],
+    ) -> None:
+        self.fabric = fabric
+        self.model = model
+        self.optimizer = optimizer
+        self.criterion = criterion
+        self.dataloader = dataloader
+
+    def range_test(
+        self,
+        start_lr: float = 1e-7,
+        end_lr: float = 10.0,
+        num_iter: int = 100,
+        smooth_f: float = 0.05,
+    ) -> tuple[list[float], list[float]]:
+        lrs = []
+        losses = []
+        best_loss = float("inf")
+        avg_loss = 0.0
+
+        # Save state
+        model_state = copy.deepcopy(self.model.state_dict())
+        optim_state = copy.deepcopy(self.optimizer.state_dict())
+
+        self.model.train()
+        iter_loader = iter(self.dataloader)
+
+        current_lr = start_lr
+        lr_multiplier = (end_lr / start_lr) ** (1 / num_iter)
+
+        for i in range(num_iter):
+            try:
+                d = next(iter_loader)
+            except StopIteration:
+                iter_loader = iter(self.dataloader)
+                d = next(iter_loader)
+
+            # Update LR
+            for param_group in self.optimizer.param_groups:
+                param_group["lr"] = current_lr
+
+            self.optimizer.zero_grad()
+
+            out_net = self.model(d)
+            out_criterion = self.criterion(out_net, d)
+            loss = out_criterion["loss"]
+
+            self.fabric.backward(loss)
+            self.optimizer.step()
+
+            loss_val = loss.item()
+            if i == 0:
+                avg_loss = loss_val
+            else:
+                avg_loss = smooth_f * loss_val + (1 - smooth_f) * avg_loss
+
+            if avg_loss < best_loss:
+                best_loss = avg_loss
+
+            if i > 0 and avg_loss > 4 * best_loss:
+                break
+
+            lrs.append(current_lr)
+            losses.append(avg_loss)
+
+            current_lr *= lr_multiplier
+
+        # Restore state
+        self.model.load_state_dict(model_state)
+        self.optimizer.load_state_dict(optim_state)
+
+        return lrs, losses
+
+
+def get_model(config: Config) -> torch.nn.Module:
     """Get model instance from config."""
     model_name = config.model.name
     quality = config.model.quality
@@ -72,7 +173,7 @@ def get_model(config: Config):
     raise ValueError(f"Unknown model: {model_name}. Available: {list(MODELS.keys())}")
 
 
-def get_dataset(config: Config, split: str):
+def get_dataset(config: Config, split: str) -> Dataset[Any]:
     """Get dataset instance from config."""
     patch_size = tuple(config.dataset.patch_size)
 
@@ -123,7 +224,9 @@ def get_dataset(config: Config, split: str):
         raise ValueError(f"Unsupported domain for dataset: {config.domain}")
 
 
-def configure_optimizers(net, config: Config):
+def configure_optimizers(
+    net: torch.nn.Module, config: Config
+) -> tuple[Optimizer, Optimizer]:
     """Configure optimizers from config."""
     conf = {
         "net": {
@@ -140,37 +243,22 @@ def configure_optimizers(net, config: Config):
 
 
 def train_one_epoch(
-    fabric,
-    model,
-    criterion,
-    train_dataloader,
-    optimizer,
-    aux_optimizer,
+    fabric: Fabric,
+    model: torch.nn.Module,
+    criterion: torch.nn.Module,
+    train_dataloader: DataLoader[Any],
+    optimizer: Optimizer,
+    aux_optimizer: Optimizer,
     epoch: int,
     config: Config,
-):
+    scheduler: LRScheduler | None = None,
+) -> None:
     """Train for one epoch."""
     model.train()
     domain = config.domain
 
     for i, d in enumerate(train_dataloader):
-        # Fabric handles device placement if setup_dataloaders is used,
-        # but for complex structures (like lists in video), we ensure it via to_device
-        # if the collation didn't handle it or if not using setup_dataloaders (but we are).
-        # However, standard collate_fn produces tensors. VideoFolder might produce lists?
-        # Looking at VideoFolder implementation or previous code:
-        # previous code did: d = [frames.to(device) for frames in d] if domain == "video"
-        # fabric.to_device handles lists recursively.
-        # Wait, if train_dataloader is setup with fabric, it might already yield on device?
-        # The docs say "The dataloader will yield data on the device".
-        # But let's be safe and use fabric.to_device if needed, but standard behavior is it's already there.
-        # Let's assume setup_dataloaders works for the structure if it's standard collate.
-        # If d is a list of tensors, Fabric dataloader wrapper usually handles it?
-        # Actually, let's use fabric.to_device(d) just to be sure if it's not.
-        # But if it's already on device, it's a no-op.
-
-        # Actually, for 'video', the previous code suggests `d` is a list of frames.
-        # Fabric dataloader usually moves the batch to device.
+        # Fabric handles device placement if setup_dataloaders is used.
 
         optimizer.zero_grad()
         aux_optimizer.zero_grad()
@@ -189,6 +277,12 @@ def train_one_epoch(
             )
 
         optimizer.step()
+
+        # Step scheduler if provided and not plateau
+        if scheduler is not None and not isinstance(
+            scheduler, optim.lr_scheduler.ReduceLROnPlateau
+        ):
+            scheduler.step()
 
         aux_loss = model.aux_loss()
         if isinstance(aux_loss, list):
@@ -209,10 +303,17 @@ def train_one_epoch(
             )
 
 
-def test_epoch(fabric, epoch: int, test_dataloader, model, criterion, config: Config):
+def test_epoch(
+    fabric: Fabric,
+    epoch: int,
+    test_dataloader: DataLoader[Any],
+    model: torch.nn.Module,
+    criterion: torch.nn.Module,
+    config: Config,
+) -> float:
     """Evaluate for one epoch."""
     model.eval()
-    domain = config.domain
+    _ = config.domain  # Used for potential domain-specific logging
 
     loss = AverageMeter()
     bpp_loss = AverageMeter()
@@ -248,11 +349,11 @@ def test_epoch(fabric, epoch: int, test_dataloader, model, criterion, config: Co
 
 
 def save_checkpoint(
-    state: Dict[str, Any],
+    state: dict[str, Any],
     is_best: bool,
     save_dir: str,
     filename: str = "checkpoint.pth.tar",
-):
+) -> None:
     """Save checkpoint to disk."""
     save_path = Path(save_dir)
     save_path.mkdir(parents=True, exist_ok=True)
@@ -264,7 +365,7 @@ def save_checkpoint(
         shutil.copyfile(filepath, save_path / "checkpoint_best_loss.pth.tar")
 
 
-def train(config: Config):
+def train(config: Config) -> None:
     """Main training function."""
     # Setup Fabric
     fabric = L.Fabric(
@@ -317,14 +418,6 @@ def train(config: Config):
     # Setup model and optimizers with Fabric
     net, optimizer, aux_optimizer = fabric.setup(net, optimizer, aux_optimizer)
 
-    lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer,
-        mode=config.scheduler.mode,
-        factor=config.scheduler.factor,
-        patience=config.scheduler.patience,
-        min_lr=config.scheduler.min_lr,
-    )
-
     # Setup loss
     if config.domain == "video":
         criterion = VideoRateDistortionLoss(lmbda=config.training.lmbda)
@@ -333,6 +426,8 @@ def train(config: Config):
             lmbda=config.training.lmbda, metric=config.training.metric
         )
 
+    lr_scheduler = None
+
     # Load checkpoint if resuming
     last_epoch = 0
     best_loss = float("inf")
@@ -340,8 +435,16 @@ def train(config: Config):
     if config.training.checkpoint:
         if fabric.is_global_zero:
             print(f"Loading checkpoint: {config.training.checkpoint}")
-        # Load on CPU first then let Fabric handle it? Or use fabric.load?
-        # Standard torch.load needs map_location. fabric.device is available.
+
+        # Default scheduler for resumption if not cyclic
+        lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer,
+            mode=config.scheduler.mode,
+            factor=config.scheduler.factor,
+            patience=config.scheduler.patience,
+            min_lr=config.scheduler.min_lr,
+        )
+
         checkpoint = torch.load(config.training.checkpoint, map_location=fabric.device)
         last_epoch = checkpoint["epoch"] + 1
         best_loss = checkpoint.get("best_loss", float("inf"))
@@ -350,6 +453,56 @@ def train(config: Config):
         aux_optimizer.load_state_dict(checkpoint["aux_optimizer"])
         if "lr_scheduler" in checkpoint:
             lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])
+
+    else:
+        # Run LR Finder and setup CyclicLR
+        if fabric.is_global_zero:
+            print("\nRunning LR Finder to determine cyclic LR limits...")
+
+        lr_finder = LRFinder(fabric, net, optimizer, criterion, train_dataloader)
+        lrs, losses = lr_finder.range_test()
+
+        best_lr = 1e-4
+        if fabric.is_global_zero:
+            min_loss_idx = losses.index(min(losses))
+            best_lr = lrs[min_loss_idx]
+            print(f"LR Finder: Best LR found = {best_lr:.6f}")
+
+            try:
+                import uniplot
+
+                print("\nLR Finder Results:")
+                uniplot.plot(
+                    losses,
+                    xs=lrs,
+                    title="Loss vs Learning Rate (Log Scale)",
+                    x_as_log=True,
+                )
+            except ImportError:
+                print("uniplot not installed, skipping chart.")
+
+        # Broadcast best_lr to all ranks
+        best_lr_tensor = torch.tensor(best_lr, device=fabric.device)
+        best_lr = fabric.broadcast(best_lr_tensor).item()
+
+        max_lr = best_lr
+        base_lr = max_lr / 6.0
+
+        if fabric.is_global_zero:
+            print(f"Setting CyclicLR: base_lr={base_lr:.6f}, max_lr={max_lr:.6f}")
+
+        # Update optimizer to base_lr
+        for param_group in optimizer.param_groups:
+            param_group["lr"] = base_lr
+
+        lr_scheduler = optim.lr_scheduler.CyclicLR(
+            optimizer,
+            base_lr=base_lr,
+            max_lr=max_lr,
+            step_size_up=len(train_dataloader) * 4,  # 4 epochs
+            mode="triangular2",
+            cycle_momentum=False,
+        )
 
     # Training loop
     if fabric.is_global_zero:
@@ -370,10 +523,14 @@ def train(config: Config):
             aux_optimizer,
             epoch,
             config,
+            lr_scheduler,
         )
 
         loss = test_epoch(fabric, epoch, test_dataloader, net, criterion, config)
-        lr_scheduler.step(loss)
+
+        # Step scheduler (plateau)
+        if isinstance(lr_scheduler, optim.lr_scheduler.ReduceLROnPlateau):
+            lr_scheduler.step(loss)
 
         is_best = loss < best_loss
         best_loss = min(loss, best_loss)
@@ -399,7 +556,7 @@ def train(config: Config):
         print(f"Checkpoints saved to: {config.training.save_dir}")
 
 
-def list_models(domain: Optional[str] = None):
+def list_models(domain: str | None = None) -> None:
     """List available models."""
     print("\nAvailable Models")
     print("=" * 60)

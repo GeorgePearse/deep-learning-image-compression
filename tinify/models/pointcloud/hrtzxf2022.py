@@ -31,9 +31,13 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 import torch
 import torch.nn as nn
+
+from torch import Tensor
 
 from tinify.entropy_models import EntropyBottleneck
 from tinify.latent_codecs import EntropyBottleneckLatentCodec
@@ -68,20 +72,26 @@ class DensityPreservingReconstructionPccModel(CompressionModel):
             CVPR 2022.
     """
 
+    compress_normal: bool
+    pre_conv: nn.Sequential
+    encoder: Encoder
+    decoder: Decoder
+    latent_codec: nn.ModuleDict
+
     def __init__(
         self,
-        downsample_rate=(1 / 3, 1 / 3, 1 / 3),
-        candidate_upsample_rate=(8, 8, 8),
-        in_dim=3,
-        feat_dim=8,
-        hidden_dim=64,
-        k=16,
-        ngroups=1,
-        sub_point_conv_mode="mlp",
-        compress_normal=False,
-        latent_xyzs_codec=None,
-        **kwargs,
-    ):
+        downsample_rate: tuple[float, ...] = (1 / 3, 1 / 3, 1 / 3),
+        candidate_upsample_rate: tuple[int, ...] = (8, 8, 8),
+        in_dim: int = 3,
+        feat_dim: int = 8,
+        hidden_dim: int = 64,
+        k: int = 16,
+        ngroups: int = 1,
+        sub_point_conv_mode: str = "mlp",
+        compress_normal: bool = False,
+        latent_xyzs_codec: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> None:
         super().__init__()
 
         self.compress_normal = compress_normal
@@ -120,11 +130,11 @@ class DensityPreservingReconstructionPccModel(CompressionModel):
             }
         )
 
-    def _prepare_input(self, input):
-        input_data = [input["pos"]]
+    def _prepare_input(self, input: dict[str, Tensor]) -> tuple[Tensor, Tensor, Tensor]:
+        input_data_list = [input["pos"]]
         if self.compress_normal:
-            input_data.append(input["normal"])
-        input_data = torch.cat(input_data, dim=1).permute(0, 2, 1).contiguous()
+            input_data_list.append(input["normal"])
+        input_data = torch.cat(input_data_list, dim=1).permute(0, 2, 1).contiguous()
 
         xyzs = input_data[:, :3].contiguous()
         gt_normals = input_data[:, 3 : 3 + 3 * self.compress_normal].contiguous()
@@ -132,7 +142,7 @@ class DensityPreservingReconstructionPccModel(CompressionModel):
 
         return xyzs, gt_normals, feats
 
-    def forward(self, input):
+    def forward(self, input: dict[str, Tensor]) -> dict[str, Any]:
         # xyzs: (b, 3, n)
 
         xyzs, gt_normals, feats = self._prepare_input(input)
@@ -178,7 +188,7 @@ class DensityPreservingReconstructionPccModel(CompressionModel):
             },
         }
 
-    def compress(self, input):
+    def compress(self, input: dict[str, Tensor]) -> dict[str, Any]:
         xyzs, _, feats = self._prepare_input(input)
 
         feats = self.pre_conv(feats)
@@ -202,7 +212,7 @@ class DensityPreservingReconstructionPccModel(CompressionModel):
             ],
         }
 
-    def decompress(self, strings, shape):
+    def decompress(self, strings: list[Any], shape: list[Any]) -> dict[str, Tensor]:
         assert isinstance(strings, list) and len(strings) == 2
 
         latent_feats_out = self.latent_codec["feat"].decompress(strings[0], shape[0])
@@ -223,7 +233,17 @@ class DensityPreservingReconstructionPccModel(CompressionModel):
 
 
 class XyzsLatentCodec(nn.Module):
-    def __init__(self, dim, hidden_dim, k, ngroups, mode="learned", conv_mode="mlp"):
+    mode: str
+
+    def __init__(
+        self,
+        dim: int,
+        hidden_dim: int,
+        k: int,
+        ngroups: int,
+        mode: str = "learned",
+        conv_mode: str = "mlp",
+    ) -> None:
         super().__init__()
         self.mode = mode
         if mode == "learned":
@@ -249,7 +269,7 @@ class XyzsLatentCodec(nn.Module):
         else:
             self.placeholder = nn.Parameter(torch.empty(0))
 
-    def forward(self, latent_xyzs):
+    def forward(self, latent_xyzs: Tensor) -> dict[str, Any]:
         if self.mode == "learned":
             z = self.analysis(latent_xyzs)
             z_hat, z_likelihoods = self.entropy_bottleneck(z)
@@ -261,7 +281,7 @@ class XyzsLatentCodec(nn.Module):
             raise ValueError(f"Unknown mode: {self.mode}")
         return {"likelihoods": {"y": z_likelihoods}, "y_hat": latent_xyzs_hat}
 
-    def compress(self, latent_xyzs):
+    def compress(self, latent_xyzs: Tensor) -> dict[str, Any]:
         if self.mode == "learned":
             z = self.analysis(latent_xyzs)
             shape = z.shape[2:]
@@ -281,14 +301,18 @@ class XyzsLatentCodec(nn.Module):
             raise ValueError(f"Unknown mode: {self.mode}")
         return {"strings": [z_strings], "shape": shape, "y_hat": latent_xyzs_hat}
 
-    def decompress(self, strings, shape):
+    def decompress(
+        self, strings: list[list[bytes]], shape: tuple[int, ...]
+    ) -> dict[str, Tensor]:
         [z_strings] = strings
         if self.mode == "learned":
             z_hat = self.entropy_bottleneck.decompress(z_strings, shape)
             latent_xyzs_hat = self.synthesis(z_hat)
         elif self.mode == "float16":
-            z_hat = [np.frombuffer(s, dtype=">f2").reshape(shape) for s in z_strings]
-            z_hat = torch.from_numpy(np.stack(z_hat)).to(self.placeholder.device)
+            z_hat_list = [
+                np.frombuffer(s, dtype=">f2").reshape(shape) for s in z_strings
+            ]
+            z_hat = torch.from_numpy(np.stack(z_hat_list)).to(self.placeholder.device)
             latent_xyzs_hat = z_hat.float()
         else:
             raise ValueError(f"Unknown mode: {self.mode}")
@@ -296,7 +320,16 @@ class XyzsLatentCodec(nn.Module):
 
 
 class Encoder(nn.Module):
-    def __init__(self, downsample_rate, dim, hidden_dim, k, ngroups):
+    downsample_layers: nn.ModuleList
+
+    def __init__(
+        self,
+        downsample_rate: tuple[float, ...],
+        dim: int,
+        hidden_dim: int,
+        k: int,
+        ngroups: int,
+    ) -> None:
         super().__init__()
         downsample_layers = [
             DownsampleLayer(downsample_rate[i], dim, hidden_dim, k, ngroups)
@@ -304,7 +337,9 @@ class Encoder(nn.Module):
         ]
         self.downsample_layers = nn.ModuleList(downsample_layers)
 
-    def forward(self, xyzs, feats):
+    def forward(
+        self, xyzs: Tensor, feats: Tensor
+    ) -> tuple[list[Tensor], list[Tensor], list[Tensor], Tensor, Tensor]:
         # xyzs: (b, 3, n)
         # feats: (b, c, n)
 
@@ -325,16 +360,24 @@ class Encoder(nn.Module):
 
 
 class Decoder(nn.Module):
+    k: int
+    compress_normal: bool
+    num_layers: int
+    downsample_rate: tuple[float, ...]
+    upsample_layers: nn.ModuleList
+    upsample_num_layers: nn.ModuleList
+    refine_layers: nn.ModuleList
+
     def __init__(
         self,
-        downsample_rate,
-        candidate_upsample_rate,
-        dim,
-        hidden_dim,
-        k,
-        sub_point_conv_mode,
-        compress_normal,
-    ):
+        downsample_rate: tuple[float, ...],
+        candidate_upsample_rate: tuple[int, ...],
+        dim: int,
+        hidden_dim: int,
+        k: int,
+        sub_point_conv_mode: str,
+        compress_normal: bool,
+    ) -> None:
         super().__init__()
 
         self.k = k
@@ -379,7 +422,9 @@ class Decoder(nn.Module):
             ]
         )
 
-    def forward(self, xyzs, feats):
+    def forward(
+        self, xyzs: Tensor, feats: Tensor
+    ) -> tuple[list[Tensor], list[Tensor], list[Tensor], Tensor]:
         # xyzs: (b, 3, n)
         # feats: (b, c, n)
 
@@ -439,8 +484,10 @@ class Decoder(nn.Module):
 
         return xyzs_hat_, unums_hat_, mdis_hat_, feats
 
-    def get_pred_mdis(self, xyzs_hat_, unums_hat_):
-        mdis_hat_ = []
+    def get_pred_mdis(
+        self, xyzs_hat_: list[Tensor], unums_hat_: list[Tensor]
+    ) -> list[Tensor]:
+        mdis_hat_: list[Tensor] = []
 
         for prev_xyzs, curr_xyzs, curr_unums in zip(
             xyzs_hat_[:-1], xyzs_hat_[1:], unums_hat_

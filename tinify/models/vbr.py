@@ -1,8 +1,14 @@
+from __future__ import annotations
+
 import warnings
+
+from typing import Any
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
+from torch import Tensor
 
 from tinify.ans import BufferedRansEncoder, RansDecoder
 from tinify.entropy_models import EntropyBottleneck, EntropyBottleneckVbr
@@ -18,7 +24,7 @@ from .base import get_scale_table
 
 # from .utils import update_registered_buffers
 
-eps = 1e-9
+eps: float = 1e-9
 
 
 @register_model("bmshj2018-hyperprior-vbr")
@@ -29,7 +35,16 @@ class ScaleHyperpriorVbr(ScaleHyperprior):
     <https://arxiv.org/abs/2402.18930>`_, Data Compression Conference (DCC), 2024.
     """
 
-    def __init__(self, N, M, vr_entbttlnck=False, **kwargs):
+    lmbda: list[float]
+    levels: int
+    Gain: nn.Parameter
+    QuantABCD: nn.Sequential
+    no_quantoffset: bool
+    vr_entbttlnck: bool
+
+    def __init__(
+        self, N: int, M: int, vr_entbttlnck: bool = False, **kwargs: Any
+    ) -> None:
         super().__init__(N=N, M=M, **kwargs)
 
         # lambdas to use during training
@@ -69,10 +84,10 @@ class ScaleHyperpriorVbr(ScaleHyperprior):
             )
             self.lower_bound_zqstep = LowerBound(0.5)
 
-    def _raise_stage_error(self, stage):
+    def _raise_stage_error(self, stage: int) -> None:
         raise ValueError(f"Invalid stage (stage={stage}) parameter for this model.")
 
-    def _get_scale(self, stage, s, inputscale):
+    def _get_scale(self, stage: int, s: int, inputscale: float | Tensor) -> Tensor:
         s = max(0, min(s, len(self.Gain) - 1))  # clips to correct range
         if self.training:
             if stage > 1:
@@ -84,10 +99,12 @@ class ScaleHyperpriorVbr(ScaleHyperprior):
             if inputscale == 0:
                 scale = self.Gain[s].detach()
             else:
-                scale = inputscale
+                scale = inputscale  # type: ignore[assignment]
         return scale
 
-    def forward(self, x, stage: int = 2, s: int = 1, inputscale=0):
+    def forward(
+        self, x: Tensor, stage: int = 2, s: int = 1, inputscale: float | Tensor = 0
+    ) -> dict[str, Any]:
         r"""stage: 1 -> non-vbr (old) code path; vbr modules not used; operates like corresponding google model. use for initial training.
         2 -> vbr code path; vbr modules now used. use for post training with e.g. MOO.
         """
@@ -175,7 +192,9 @@ class ScaleHyperpriorVbr(ScaleHyperprior):
     #     super().load_state_dict(state_dict)
 
     @classmethod
-    def from_state_dict(cls, state_dict, vr_entbttlnck=False):
+    def from_state_dict(
+        cls, state_dict: dict[str, Any], vr_entbttlnck: bool = False
+    ) -> ScaleHyperpriorVbr:
         """Return a new model instance from `state_dict`."""
         N = state_dict["g_a.0.weight"].size(0)
         M = state_dict["g_a.6.weight"].size(0)
@@ -185,7 +204,12 @@ class ScaleHyperpriorVbr(ScaleHyperprior):
         net.load_state_dict(state_dict)
         return net
 
-    def update(self, scale_table=None, force=False, scale=None):
+    def update(
+        self,
+        scale_table: Tensor | None = None,
+        force: bool = False,
+        scale: Tensor | None = None,
+    ) -> bool:
         if scale_table is None:
             scale_table = get_scale_table()
         updated = self.gaussian_conditional.update_scale_table(scale_table, force=force)
@@ -203,7 +227,9 @@ class ScaleHyperpriorVbr(ScaleHyperprior):
         updated |= rv
         return updated
 
-    def compress(self, x, stage: int = 2, s: int = 1, inputscale=0):
+    def compress(
+        self, x: Tensor, stage: int = 2, s: int = 1, inputscale: float | Tensor = 0
+    ) -> dict[str, Any]:
         if inputscale != 0:
             scale = inputscale
         else:
@@ -237,7 +263,14 @@ class ScaleHyperpriorVbr(ScaleHyperprior):
             y_strings = self.gaussian_conditional.compress(y * scale, indexes)
         return {"strings": [y_strings, z_strings], "shape": z.size()[-2:]}
 
-    def decompress(self, strings, shape, stage: int = 2, s: int = 1, inputscale=0):
+    def decompress(
+        self,
+        strings: list[list[bytes]],
+        shape: tuple[int, ...],
+        stage: int = 2,
+        s: int = 1,
+        inputscale: float | Tensor = 0,
+    ) -> dict[str, Tensor]:
         assert isinstance(strings, list) and len(strings) == 2
         if inputscale != 0:
             scale = inputscale
@@ -310,10 +343,14 @@ class MeanScaleHyperpriorVbr(ScaleHyperpriorVbr, MeanScaleHyperprior):
     <https://arxiv.org/abs/2402.18930>`_, Data Compression Conference (DCC), 2024.
     """
 
-    def __init__(self, N=192, M=320, vr_entbttlnck=False, **kwargs):
+    def __init__(
+        self, N: int = 192, M: int = 320, vr_entbttlnck: bool = False, **kwargs: Any
+    ) -> None:
         super().__init__(N, M, vr_entbttlnck=vr_entbttlnck, **kwargs)
 
-    def forward(self, x, stage: int = 2, s: int = 1, inputscale=0):
+    def forward(
+        self, x: Tensor, stage: int = 2, s: int = 1, inputscale: float | Tensor = 0
+    ) -> dict[str, Any]:
         r"""stage: 1 -> non-vbr (old) code path; vbr modules not used; operates like corresponding google model. use for initial training.
         2 -> vbr code path; vbr modules now used. use for post training with e.g. MOO.
         """
@@ -399,7 +436,9 @@ class MeanScaleHyperpriorVbr(ScaleHyperpriorVbr, MeanScaleHyperprior):
             "likelihoods": {"y": y_likelihoods, "z": z_likelihoods},
         }
 
-    def compress(self, x, stage: int = 2, s: int = 1, inputscale=0):
+    def compress(
+        self, x: Tensor, stage: int = 2, s: int = 1, inputscale: float | Tensor = 0
+    ) -> dict[str, Any]:
         if inputscale != 0:
             scale = inputscale
         else:
@@ -436,7 +475,14 @@ class MeanScaleHyperpriorVbr(ScaleHyperpriorVbr, MeanScaleHyperprior):
             )
         return {"strings": [y_strings, z_strings], "shape": z.size()[-2:]}
 
-    def decompress(self, strings, shape, stage: int = 2, s: int = 1, inputscale=0):
+    def decompress(
+        self,
+        strings: list[list[bytes]],
+        shape: tuple[int, ...],
+        stage: int = 2,
+        s: int = 1,
+        inputscale: float | Tensor = 0,
+    ) -> dict[str, Tensor]:
         assert isinstance(strings, list) and len(strings) == 2
         if inputscale != 0:
             scale = inputscale
@@ -513,7 +559,11 @@ class JointAutoregressiveHierarchicalPriorsVbr(
     <https://arxiv.org/abs/2402.18930>`_, Data Compression Conference (DCC), 2024.
     """
 
-    def __init__(self, N=192, M=320, **kwargs):
+    ste_recursive: bool
+    scl2ctx: bool
+    scale_to_context: nn.Linear
+
+    def __init__(self, N: int = 192, M: int = 320, **kwargs: Any) -> None:
         super().__init__(N, M, vr_entbttlnck=False, **kwargs)
 
         self.ste_recursive = True
@@ -524,7 +574,9 @@ class JointAutoregressiveHierarchicalPriorsVbr(
         # have better entropy parameters for any quantization stepsize
         self.scale_to_context = nn.Linear(1, 2 * M)
 
-    def forward(self, x, stage: int = 2, s: int = 1, inputscale=0):
+    def forward(
+        self, x: Tensor, stage: int = 2, s: int = 1, inputscale: float | Tensor = 0
+    ) -> dict[str, Any]:
         r"""stage: 1 -> non-vbr (old) code path; vbr modules not used; operates like corresponding google model. use for initial training.
         2 -> vbr code path; vbr modules now used. use for post training with e.g. MOO.
         """
@@ -667,7 +719,9 @@ class JointAutoregressiveHierarchicalPriorsVbr(
         return y_hat, y_likelihoods
 
     @classmethod
-    def from_state_dict(cls, state_dict):
+    def from_state_dict(
+        cls, state_dict: dict[str, Any]
+    ) -> JointAutoregressiveHierarchicalPriorsVbr:
         """Return a new model instance from `state_dict`."""
         N = state_dict["g_a.0.weight"].size(0)
         M = state_dict["g_a.6.weight"].size(0)
@@ -675,7 +729,9 @@ class JointAutoregressiveHierarchicalPriorsVbr(
         net.load_state_dict(state_dict)
         return net
 
-    def compress(self, x, stage: int = 2, s: int = 1, inputscale=0):
+    def compress(
+        self, x: Tensor, stage: int = 2, s: int = 1, inputscale: float | Tensor = 0
+    ) -> dict[str, Any]:
         if next(self.parameters()).device != torch.device("cpu"):
             warnings.warn(
                 "Inference on GPU is not recommended for the autoregressive "
@@ -813,7 +869,14 @@ class JointAutoregressiveHierarchicalPriorsVbr(
         string = encoder.flush()
         return string
 
-    def decompress(self, strings, shape, stage: int = 2, s: int = 1, inputscale=0):
+    def decompress(
+        self,
+        strings: list[list[bytes]],
+        shape: tuple[int, ...],
+        stage: int = 2,
+        s: int = 1,
+        inputscale: float | Tensor = 0,
+    ) -> dict[str, Tensor]:
         assert isinstance(strings, list) and len(strings) == 2
 
         if next(self.parameters()).device != torch.device("cpu"):

@@ -27,11 +27,13 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
 from .bound_ops import LowerBound
 from .ops import compute_padding, quantize_ste
 from .parametrizers import NonNegativeParametrizer
 
-__all__ = [
+__all__: list[str] = [
     "compute_padding",
     "quantize_ste",
     "LowerBound",

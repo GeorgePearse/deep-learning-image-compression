@@ -27,8 +27,10 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
 from pathlib import Path
-from typing import Tuple, Union
+from typing import Any, Callable, TypeVar
 
 import numpy as np
 
@@ -37,11 +39,13 @@ from torch.utils.data import Dataset
 
 from tinify.registry import register_dataset
 
-_size_2_t = Union[int, Tuple[int, int]]
+_size_2_t = int | tuple[int, int]
+
+T = TypeVar("T")
 
 
 @register_dataset("PreGeneratedMemmapDataset")
-class PreGeneratedMemmapDataset(Dataset):
+class PreGeneratedMemmapDataset(Dataset[Image.Image | T]):
     """A data loader for memory-mapped numpy arrays.
 
     This allows for fast training where the images patches have already been
@@ -59,13 +63,18 @@ class PreGeneratedMemmapDataset(Dataset):
         pin_memory (bool): pin memory.
     """
 
+    split: str
+    transform: Callable[[Image.Image], T] | None
+    shuffle: bool
+    data: np.ndarray
+
     def __init__(
         self,
         root: str,
-        transform=None,
+        transform: Callable[[Image.Image], T] | None = None,
         split: str = "train",
         image_size: _size_2_t = (256, 256),
-    ):
+    ) -> None:
         if not Path(root).is_dir():
             raise RuntimeError(f"Invalid path {root}")
 
@@ -86,18 +95,18 @@ class PreGeneratedMemmapDataset(Dataset):
         image_size = _coerce_size_2_t(image_size)
         self.data = data.reshape((-1, image_size[0], image_size[1], 3))
 
-    def __getitem__(self, index):
+    def __getitem__(self, index: int) -> Image.Image | T:
         sample = self.data[index]
         sample = Image.fromarray(sample)
         if self.transform:
             return self.transform(sample)
         return sample
 
-    def __len__(self):
+    def __len__(self) -> int:
         return self.data.shape[0]
 
 
-def _coerce_size_2_t(x: _size_2_t) -> Tuple[int, int]:
+def _coerce_size_2_t(x: _size_2_t) -> tuple[int, int]:
     if isinstance(x, int):
         return x, x
     return x

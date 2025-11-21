@@ -27,6 +27,11 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
+from typing import Any
+
+import torch.nn as nn
 from torch.hub import load_state_dict_from_url
 
 from tinify.models import (
@@ -51,7 +56,7 @@ __all__ = [
     "cheng2020_attn",
 ]
 
-model_architectures = {
+model_architectures: dict[str, type[nn.Module]] = {
     "bmshj2018-factorized": FactorizedPrior,
     "bmshj2018_factorized_relu": FactorizedPriorReLU,
     "bmshj2018-hyperprior": ScaleHyperprior,
@@ -61,8 +66,8 @@ model_architectures = {
     "cheng2020-attn": Cheng2020Attention,
 }
 
-root_url = "https://tinify.s3.amazonaws.com/models/v1"
-model_urls = {
+root_url: str = "https://tinify.s3.amazonaws.com/models/v1"
+model_urls: dict[str, dict[str, dict[int, str]]] = {
     "bmshj2018-factorized": {
         "mse": {
             1: f"{root_url}/bmshj2018-factorized-prior-1-446d5c7f.pth.tar",
@@ -189,7 +194,7 @@ model_urls = {
     },
 }
 
-cfgs = {
+cfgs: dict[str, dict[int, tuple[int, ...]]] = {
     "bmshj2018-factorized": {
         1: (128, 192),
         2: (128, 192),
@@ -260,8 +265,13 @@ cfgs = {
 
 
 def _load_model(
-    architecture, metric, quality, pretrained=False, progress=True, **kwargs
-):
+    architecture: str,
+    metric: str,
+    quality: int,
+    pretrained: bool = False,
+    progress: bool = True,
+    **kwargs: Any,
+) -> nn.Module:
     if architecture not in model_architectures:
         raise ValueError(f'Invalid architecture name "{architecture}"')
 
@@ -287,8 +297,12 @@ def _load_model(
 
 
 def bmshj2018_factorized(
-    quality, metric="mse", pretrained=False, progress=True, **kwargs
-):
+    quality: int,
+    metric: str = "mse",
+    pretrained: bool = False,
+    progress: bool = True,
+    **kwargs: Any,
+) -> nn.Module:
     r"""Factorized Prior model from J. Balle, D. Minnen, S. Singh, S.J. Hwang,
     N. Johnston: `"Variational Image Compression with a Scale Hyperprior"
     <https://arxiv.org/abs/1802.01436>`_, Int Conf. on Learning Representations
@@ -312,8 +326,12 @@ def bmshj2018_factorized(
 
 
 def bmshj2018_factorized_relu(
-    quality, metric="mse", pretrained=False, progress=True, **kwargs
-):
+    quality: int,
+    metric: str = "mse",
+    pretrained: bool = False,
+    progress: bool = True,
+    **kwargs: Any,
+) -> nn.Module:
     r"""Factorized Prior model from J. Balle, D. Minnen, S. Singh, S.J. Hwang,
     N. Johnston: `"Variational Image Compression with a Scale Hyperprior"
     <https://arxiv.org/abs/1802.01436>`_, Int Conf. on Learning Representations
@@ -337,8 +355,12 @@ def bmshj2018_factorized_relu(
 
 
 def bmshj2018_hyperprior(
-    quality, metric="mse", pretrained=False, progress=True, **kwargs
-):
+    quality: int,
+    metric: str = "mse",
+    pretrained: bool = False,
+    progress: bool = True,
+    **kwargs: Any,
+) -> nn.Module:
     r"""Scale Hyperprior model from J. Balle, D. Minnen, S. Singh, S.J. Hwang,
     N. Johnston: `"Variational Image Compression with a Scale Hyperprior"
     <https://arxiv.org/abs/1802.01436>`_ Int. Conf. on Learning Representations
@@ -361,7 +383,13 @@ def bmshj2018_hyperprior(
     )
 
 
-def mbt2018_mean(quality, metric="mse", pretrained=False, progress=True, **kwargs):
+def mbt2018_mean(
+    quality: int,
+    metric: str = "mse",
+    pretrained: bool = False,
+    progress: bool = True,
+    **kwargs: Any,
+) -> nn.Module:
     r"""Scale Hyperprior with non zero-mean Gaussian conditionals from D.
     Minnen, J. Balle, G.D. Toderici: `"Joint Autoregressive and Hierarchical
     Priors for Learned Image Compression" <https://arxiv.org/abs/1809.02736>`_,
@@ -382,7 +410,13 @@ def mbt2018_mean(quality, metric="mse", pretrained=False, progress=True, **kwarg
     return _load_model("mbt2018-mean", metric, quality, pretrained, progress, **kwargs)
 
 
-def mbt2018(quality, metric="mse", pretrained=False, progress=True, **kwargs):
+def mbt2018(
+    quality: int,
+    metric: str = "mse",
+    pretrained: bool = False,
+    progress: bool = True,
+    **kwargs: Any,
+) -> nn.Module:
     r"""Joint Autoregressive Hierarchical Priors model from D.
     Minnen, J. Balle, G.D. Toderici: `"Joint Autoregressive and Hierarchical
     Priors for Learned Image Compression" <https://arxiv.org/abs/1809.02736>`_,
@@ -403,7 +437,13 @@ def mbt2018(quality, metric="mse", pretrained=False, progress=True, **kwargs):
     return _load_model("mbt2018", metric, quality, pretrained, progress, **kwargs)
 
 
-def cheng2020_anchor(quality, metric="mse", pretrained=False, progress=True, **kwargs):
+def cheng2020_anchor(
+    quality: int,
+    metric: str = "mse",
+    pretrained: bool = False,
+    progress: bool = True,
+    **kwargs: Any,
+) -> nn.Module:
     r"""Anchor model variant from `"Learned Image Compression with
     Discretized Gaussian Mixture Likelihoods and Attention Modules"
     <https://arxiv.org/abs/2001.01568>`_, by Zhengxue Cheng, Heming Sun, Masaru
@@ -426,7 +466,13 @@ def cheng2020_anchor(quality, metric="mse", pretrained=False, progress=True, **k
     )
 
 
-def cheng2020_attn(quality, metric="mse", pretrained=False, progress=True, **kwargs):
+def cheng2020_attn(
+    quality: int,
+    metric: str = "mse",
+    pretrained: bool = False,
+    progress: bool = True,
+    **kwargs: Any,
+) -> nn.Module:
     r"""Self-attention model variant from `"Learned Image Compression with
     Discretized Gaussian Mixture Likelihoods and Attention Modules"
     <https://arxiv.org/abs/2001.01568>`_, by Zhengxue Cheng, Heming Sun, Masaru

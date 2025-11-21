@@ -59,7 +59,7 @@ def test_cli_train_image_fabric(tmp_path):
 
 def test_cli_train_video_fabric(tmp_path):
     cwd = Path(__file__).resolve().parent
-    rootdir = cwd.parent
+    _ = cwd.parent  # noqa: F841 - rootdir available if needed
 
     # Setup fake video dataset
     dataset_dir = tmp_path / "video_dataset"

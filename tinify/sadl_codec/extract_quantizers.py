@@ -27,17 +27,20 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
 import argparse
 import pickle
 import re
 import sys
+from typing import Any
 
 # expect pickle file format:
 # {
 #   'quantizers': { 'weight0': 10, 'weight1': 13 ...},
 # }
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
+    parser: argparse.ArgumentParser = argparse.ArgumentParser(
         prog="extract_quantizers",
         usage="use output of debug_model to identify layers index.\nusage: debug_model model.sadl | extract_quantizers --input model_info.pkl > quantizers.txt",
     )
@@ -50,51 +53,55 @@ if __name__ == "__main__":
     )
     parser.add_argument("--verbose", action="count")
 
-args = parser.parse_args()
+    args: argparse.Namespace = parser.parse_args()
 
-with open(args.input, "rb") as f:
-    infos = pickle.load(f)
+    with open(args.input, "rb") as f:
+        infos: dict[str, Any] = pickle.load(f)
 
-if args.verbose:
-    print(infos, file=sys.stderr)
+    if args.verbose:
+        print(infos, file=sys.stderr)
 
-started = False
-d = {}
-firstLayer = None
-conv = {}
-for line in sys.stdin:
-    if "Exit" == line.rstrip() or "end model inference" in line:
-        break
-    if "start model inference" in line:
-        started = True
-    if started:
-        m = re.match(r"\[INFO\]\s+(\d+)\s+Const\s+\((.+)\).*", line)
-        if m is not None:
-            d[m[2]] = int(m[1])
+    started: bool = False
+    d: dict[str, int] = {}
+    firstLayer: int | None = None
+    conv: dict[int, int] = {}
+    for line in sys.stdin:
+        if "Exit" == line.rstrip() or "end model inference" in line:
+            break
+        if "start model inference" in line:
+            started = True
+        if started:
+            m: re.Match[str] | None = re.match(
+                r"\[INFO\]\s+(\d+)\s+Const\s+\((.+)\).*", line
+            )
+            if m is not None:
+                d[m[2]] = int(m[1])
 
-        m = re.match(r"\[INFO\]\s+(\d+)\s+Conv2DTranspose\s+\((.+)\).*", line)
-        if m is not None:
-            if firstLayer is None:
-                firstLayer = int(m[1])
-            else:
-                conv[int(m[1])] = 0
+            m = re.match(r"\[INFO\]\s+(\d+)\s+Conv2DTranspose\s+\((.+)\).*", line)
+            if m is not None:
+                if firstLayer is None:
+                    firstLayer = int(m[1])
+                else:
+                    conv[int(m[1])] = 0
 
-if args.verbose:
-    print(
-        "[INFO] first layer: {}, layers index: {}".format(firstLayer, d),
-        file=sys.stderr,
-    )
+    if args.verbose:
+        print(
+            "[INFO] first layer: {}, layers index: {}".format(firstLayer, d),
+            file=sys.stderr,
+        )
 
-assert "quantizers" in infos, "No quantizers key in {}".format(args.input)
+    assert "quantizers" in infos, "No quantizers key in {}".format(args.input)
 
-# get quantizers
-print("0 0 ", end="")  # input is already in integer, do not put any quantizer
-for k, v in infos["quantizers"].items():
-    name = k
-    assert name in d, "{} not in extracted names {}".format(name, d)
-    print("{} {} ".format(d[name], int(v)), end="")
-    if int(d[name]) == firstLayer - 1:  # const layer corresponding to the first deconv
-        print("{} {} ".format(firstLayer, -int(v)), end="")
-for k, v in conv.items():
-    print("{} {} ".format(k, v), end="")
-print("")
+    # get quantizers
+    print("0 0 ", end="")  # input is already in integer, do not put any quantizer
+    for k, v in infos["quantizers"].items():
+        name: str = k
+        assert name in d, "{} not in extracted names {}".format(name, d)
+        print("{} {} ".format(d[name], int(v)), end="")
+        if (
+            firstLayer is not None and int(d[name]) == firstLayer - 1
+        ):  # const layer corresponding to the first deconv
+            print("{} {} ".format(firstLayer, -int(v)), end="")
+    for k, v in conv.items():
+        print("{} {} ".format(k, v), end="")
+    print("")

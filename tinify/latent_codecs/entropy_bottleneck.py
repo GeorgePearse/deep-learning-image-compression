@@ -27,7 +27,9 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from typing import Any, Dict, List, Optional, Tuple
+from __future__ import annotations
+
+from typing import Any
 
 from torch import Tensor
 
@@ -63,25 +65,25 @@ class EntropyBottleneckLatentCodec(LatentCodec):
 
     def __init__(
         self,
-        entropy_bottleneck: Optional[EntropyBottleneck] = None,
-        **kwargs,
-    ):
+        entropy_bottleneck: EntropyBottleneck | None = None,
+        **kwargs: Any,
+    ) -> None:
         super().__init__()
         self.entropy_bottleneck = entropy_bottleneck or EntropyBottleneck(**kwargs)
 
-    def forward(self, y: Tensor) -> Dict[str, Any]:
+    def forward(self, y: Tensor) -> dict[str, Any]:
         y_hat, y_likelihoods = self.entropy_bottleneck(y)
         return {"likelihoods": {"y": y_likelihoods}, "y_hat": y_hat}
 
-    def compress(self, y: Tensor) -> Dict[str, Any]:
+    def compress(self, y: Tensor) -> dict[str, Any]:
         shape = y.size()[-2:]
         y_strings = self.entropy_bottleneck.compress(y)
         y_hat = self.entropy_bottleneck.decompress(y_strings, shape)
         return {"strings": [y_strings], "shape": shape, "y_hat": y_hat}
 
     def decompress(
-        self, strings: List[List[bytes]], shape: Tuple[int, int], **kwargs
-    ) -> Dict[str, Any]:
+        self, strings: list[list[bytes]], shape: tuple[int, int], **kwargs: Any
+    ) -> dict[str, Any]:
         (y_strings,) = strings
         y_hat = self.entropy_bottleneck.decompress(y_strings, shape)
         return {"y_hat": y_hat}

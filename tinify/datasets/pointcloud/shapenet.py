@@ -33,8 +33,8 @@ import json
 import os
 import re
 import shutil
-
 from pathlib import Path
+from typing import Any, Callable
 
 import numpy as np
 import pandas as pd
@@ -93,18 +93,18 @@ class ShapeNetCorePartDataset(CacheDataset):
             <https://paperswithcode.com/sota/3d-part-segmentation-on-shapenet-part>`_
     """
 
-    URLS = {
+    URLS: dict[str, str] = {
         "shapenetcore_partanno_segmentation_benchmark_v0": "https://shapenet.cs.stanford.edu/media/shapenetcore_partanno_segmentation_benchmark_v0.zip",
         "shapenetcore_partanno_segmentation_benchmark_v0_normal": "https://shapenet.cs.stanford.edu/media/shapenetcore_partanno_segmentation_benchmark_v0_normal.zip",
     }
     # Related: https://shapenet.cs.stanford.edu/media/shapenet_part_seg_hdf5_data.zip
 
-    HASHES = {
+    HASHES: dict[str, str] = {
         "shapenetcore_partanno_segmentation_benchmark_v0": "f1dc7bad73237060946f13e1fa767b40d9adba52a79d42d64de31552b8c0b65e",
         "shapenetcore_partanno_segmentation_benchmark_v0_normal": "0e26411700bae2da38ee8ecc719ba4db2e6e0133486e258665952ad5dfced0fe",
     }
 
-    CATEGORY_ID_TO_CATEGORY_STR = {
+    CATEGORY_ID_TO_CATEGORY_STR: dict[str, str] = {
         "02691156": "Airplane",
         "02773838": "Bag",
         "02954340": "Cap",
@@ -123,7 +123,7 @@ class ShapeNetCorePartDataset(CacheDataset):
         "04379243": "Table",
     }
 
-    NUM_PARTS = {
+    NUM_PARTS: dict[str, int] = {
         "02691156": 4,  # Airplane
         "02773838": 2,  # Bag
         "02954340": 2,  # Cap
@@ -142,17 +142,25 @@ class ShapeNetCorePartDataset(CacheDataset):
         "04379243": 3,  # Table
     }
 
+    root: Path | None
+    cache_root: Path
+    split: str
+    split_name: str
+    name: str
+    category_id_info: dict[str, dict[str, str | int]]
+    category_offsets: np.ndarray
+
     def __init__(
         self,
-        root=None,
-        cache_root=None,
-        split="train",
-        split_name=None,
-        pre_transform=None,
-        transform=None,
-        name="shapenetcore_partanno_segmentation_benchmark_v0_normal",
-        download=True,
-    ):
+        root: str | Path | None = None,
+        cache_root: str | Path | None = None,
+        split: str = "train",
+        split_name: str | None = None,
+        pre_transform: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        transform: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        name: str = "shapenetcore_partanno_segmentation_benchmark_v0_normal",
+        download: bool = True,
+    ) -> None:
         if cache_root is None:
             assert root is not None
             cache_root = f"{str(root).rstrip('/')}_cache"
@@ -188,7 +196,7 @@ class ShapeNetCorePartDataset(CacheDataset):
 
         self._ensure_cache()
 
-    def download(self, force=False):
+    def download(self, force: bool = False) -> None:
         if not force and self.root.exists():
             return
         tmpdir = self.root.parent / "tmp"
@@ -200,7 +208,7 @@ class ShapeNetCorePartDataset(CacheDataset):
         shutil.unpack_archive(filepath, tmpdir)
         shutil.move(tmpdir / f"{self.name}", self.root)
 
-    def _verify_category_ids(self):
+    def _verify_category_ids(self) -> None:
         with open(self.root / "synsetoffset2category.txt") as f:
             pairs = [line.split() for line in f.readlines()]
         category_id_to_category_str = {
@@ -208,17 +216,21 @@ class ShapeNetCorePartDataset(CacheDataset):
         }
         assert category_id_to_category_str == self.CATEGORY_ID_TO_CATEGORY_STR
 
-    def _get_items(self):
+    def _get_items(self) -> list[str]:
         file_list = f"shuffled_{self.split}_file_list.json"
         with open(self.root / "train_test_split" / file_list) as f:
-            paths = json.load(f)
+            paths: list[str] = json.load(f)
         return paths
 
-    def _load_item(self, path):
+    def _load_item(self, path: str) -> dict[str, np.ndarray]:
         category_id, file_hash = self._parse_path(path)
         category_index = self.category_id_info[category_id]["category_index"]
         category_offset = self.category_offsets[category_index]
-        read_csv_kwargs = {"sep": " ", "header": None, "index_col": False}
+        read_csv_kwargs: dict[str, Any] = {
+            "sep": " ",
+            "header": None,
+            "index_col": False,
+        }
 
         if self.name == "shapenetcore_partanno_segmentation_benchmark_v0_normal":
             names = ["x", "y", "z", "nx", "ny", "nz", "semantic_index"]
@@ -252,7 +264,7 @@ class ShapeNetCorePartDataset(CacheDataset):
         else:
             raise ValueError(f"Unknown name: {self.name}")
 
-        data = {
+        data: dict[str, np.ndarray] = {
             "category_index": np.array([category_index], dtype=np.uint8),
             "part_index": df["part_index"].values,
             "semantic_index": df["semantic_index"].values,
@@ -264,7 +276,7 @@ class ShapeNetCorePartDataset(CacheDataset):
 
         return data
 
-    def _parse_path(self, path):
+    def _parse_path(self, path: str) -> tuple[str, str]:
         pattern = r"^.*?/?(?P<category_id>\d+)/(?P<file_hash>[-a-fu\d]+)$"
         match = re.match(pattern, str(path))
         if match is None:

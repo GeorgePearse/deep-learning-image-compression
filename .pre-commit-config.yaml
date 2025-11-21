@@ -1,0 +1,25 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.6
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: ty
+        name: ty type checker
+        entry: uv run ty check tinify/
+        language: system
+        types: [python]
+        pass_filenames: false
+
+      - id: zuban
+        name: zuban type checker
+        entry: uv run zuban check tinify/
+        language: system
+        types: [python]
+        pass_filenames: false
+        # zuban has more errors than ty for now, mark as non-blocking
+        verbose: true

@@ -46,7 +46,9 @@ Examples:
 
     # Train command
     train_parser = subparsers.add_parser("train", help="Train compression models")
-    train_subparsers = train_parser.add_subparsers(dest="domain", help="Compression domain")
+    train_subparsers = train_parser.add_subparsers(
+        dest="domain", help="Compression domain"
+    )
 
     # Image training
     image_parser = train_subparsers.add_parser(
@@ -86,37 +88,48 @@ Examples:
     return parser
 
 
-def _add_train_args(parser: argparse.ArgumentParser):
+def _add_train_args(parser: argparse.ArgumentParser) -> None:
     """Add common training arguments to parser."""
     # Config file
     parser.add_argument(
-        "-c", "--config",
+        "-c",
+        "--config",
         type=str,
         help="Path to config file (YAML/JSON/TOML)",
     )
 
     # Model
     parser.add_argument(
-        "-m", "--model",
+        "-m",
+        "--model",
         type=str,
         help="Model architecture name",
     )
     parser.add_argument(
-        "-q", "--quality",
+        "-q",
+        "--quality",
         type=int,
         help="Quality level (1-8)",
     )
 
     # Dataset
     parser.add_argument(
-        "-d", "--dataset",
+        "-d",
+        "--dataset",
         type=str,
         help="Path to training dataset",
+    )
+    parser.add_argument(
+        "--patch-size",
+        type=int,
+        nargs=2,
+        help="Size of the patches to be cropped (e.g. 256 256)",
     )
 
     # Training
     parser.add_argument(
-        "-e", "--epochs",
+        "-e",
+        "--epochs",
         type=int,
         help="Number of training epochs",
     )
@@ -127,13 +140,15 @@ def _add_train_args(parser: argparse.ArgumentParser):
         help="Training batch size",
     )
     parser.add_argument(
-        "--lambda", "--lmbda",
+        "--lambda",
+        "--lmbda",
         type=float,
         dest="lmbda",
         help="Rate-distortion trade-off parameter",
     )
     parser.add_argument(
-        "-lr", "--learning-rate",
+        "-lr",
+        "--learning-rate",
         type=float,
         dest="learning_rate",
         help="Learning rate for main optimizer",
@@ -172,7 +187,7 @@ def _add_train_args(parser: argparse.ArgumentParser):
     )
 
 
-def main(args=None):
+def main(args: list[str] | None = None) -> int:
     """Main entry point."""
     parser = create_parser()
     parsed_args = parser.parse_args(args)
@@ -204,7 +219,9 @@ def main(args=None):
 
         # Validate required arguments
         if not config.dataset.path:
-            print("Error: Dataset path is required. Use -d/--dataset or specify in config.")
+            print(
+                "Error: Dataset path is required. Use -d/--dataset or specify in config."
+            )
             return 1
 
         # Run training

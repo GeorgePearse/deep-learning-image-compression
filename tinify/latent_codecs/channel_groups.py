@@ -27,12 +27,14 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
+from collections.abc import Mapping
 from itertools import accumulate
-from typing import Any, Dict, List, Mapping, Tuple
+from typing import Any
 
 import torch
 import torch.nn as nn
-
 from torch import Tensor
 
 from tinify.registry import register_module
@@ -65,32 +67,34 @@ class ChannelGroupsLatentCodec(LatentCodec):
     """
 
     latent_codec: Mapping[str, LatentCodec]
-
     channel_context: Mapping[str, nn.Module]
+    groups: list[int]
+    groups_acc: list[int]
+    _kwargs: dict[str, Any]
 
     def __init__(
         self,
         latent_codec: Mapping[str, LatentCodec],
         channel_context: Mapping[str, nn.Module],
         *,
-        groups: List[int],
-        **kwargs,
-    ):
+        groups: list[int],
+        **kwargs: Any,
+    ) -> None:
         super().__init__()
         self._kwargs = kwargs
         self.groups = list(groups)
         self.groups_acc = list(accumulate(self.groups, initial=0))
-        self.channel_context = nn.ModuleDict(channel_context)
-        self.latent_codec = nn.ModuleDict(latent_codec)
+        self.channel_context = nn.ModuleDict(channel_context)  # type: ignore[arg-type]
+        self.latent_codec = nn.ModuleDict(latent_codec)  # type: ignore[arg-type]
 
     def __getitem__(self, key: str) -> LatentCodec:
-        return self.latent_codec[key]
+        return self.latent_codec[key]  # type: ignore[return-value]
 
-    def forward(self, y: Tensor, side_params: Tensor) -> Dict[str, Any]:
+    def forward(self, y: Tensor, side_params: Tensor) -> dict[str, Any]:
         y_ = torch.split(y, self.groups, dim=1)
-        y_out_ = [{}] * len(self.groups)
-        y_hat_ = [Tensor()] * len(self.groups)
-        y_likelihoods_ = [Tensor()] * len(self.groups)
+        y_out_: list[dict[str, Any]] = [{}] * len(self.groups)
+        y_hat_: list[Tensor] = [Tensor()] * len(self.groups)
+        y_likelihoods_: list[Tensor] = [Tensor()] * len(self.groups)
 
         for k in range(len(self.groups)):
             params = self._get_ctx_params(k, side_params, y_hat_)
@@ -108,14 +112,14 @@ class ChannelGroupsLatentCodec(LatentCodec):
             "y_hat": y_hat,
         }
 
-    def compress(self, y: Tensor, side_params: Tensor) -> Dict[str, Any]:
+    def compress(self, y: Tensor, side_params: Tensor) -> dict[str, Any]:
         y_ = torch.split(y, self.groups, dim=1)
-        y_out_ = [{}] * len(self.groups)
+        y_out_: list[dict[str, Any]] = [{}] * len(self.groups)
         y_hat = torch.zeros_like(y)
         y_hat_ = y_hat.split(self.groups, dim=1)
 
         for k in range(len(self.groups)):
-            params = self._get_ctx_params(k, side_params, y_hat_)
+            params = self._get_ctx_params(k, side_params, list(y_hat_))
             y_out_[k] = self.latent_codec[f"y{k}"].compress(y_[k], params)
             y_hat_[k][:] = y_out_[k]["y_hat"]
 
@@ -130,22 +134,22 @@ class ChannelGroupsLatentCodec(LatentCodec):
 
     def decompress(
         self,
-        strings: List[List[bytes]],
-        shape: List[Tuple[int, ...]],
+        strings: list[list[bytes]],
+        shape: list[tuple[int, ...]],
         side_params: Tensor,
-        **kwargs,
-    ) -> Dict[str, Any]:
+        **kwargs: Any,
+    ) -> dict[str, Any]:
         n = len(strings[0])
         assert all(len(ss) == n for ss in strings)
         strings_per_group = len(strings) // len(self.groups)
 
-        y_out_ = [{}] * len(self.groups)
+        y_out_: list[dict[str, Any]] = [{}] * len(self.groups)
         y_shape = (sum(s[0] for s in shape), *shape[0][1:])
         y_hat = torch.zeros((n, *y_shape), device=side_params.device)
         y_hat_ = y_hat.split(self.groups, dim=1)
 
         for k in range(len(self.groups)):
-            params = self._get_ctx_params(k, side_params, y_hat_)
+            params = self._get_ctx_params(k, side_params, list(y_hat_))
             y_out_[k] = self.latent_codec[f"y{k}"].decompress(
                 strings[strings_per_group * k : strings_per_group * (k + 1)],
                 shape[k],
@@ -157,14 +161,14 @@ class ChannelGroupsLatentCodec(LatentCodec):
             "y_hat": y_hat,
         }
 
-    def merge_y(self, *args):
+    def merge_y(self, *args: Tensor) -> Tensor:
         return torch.cat(args, dim=1)
 
-    def merge_params(self, *args):
+    def merge_params(self, *args: Tensor) -> Tensor:
         return torch.cat(args, dim=1)
 
     def _get_ctx_params(
-        self, k: int, side_params: Tensor, y_hat_: List[Tensor]
+        self, k: int, side_params: Tensor, y_hat_: list[Tensor]
     ) -> Tensor:
         if k == 0:
             return side_params

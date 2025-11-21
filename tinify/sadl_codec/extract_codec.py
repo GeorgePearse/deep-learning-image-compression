@@ -27,14 +27,17 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
 import argparse
 import pickle
 import sys
+from typing import Any
 
 import torch
 
 
-def parse_args(argv):
+def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Extract the decoder from the full model and convert it into ONNX. Extract decoder info to a pickle."
     )
@@ -54,7 +57,7 @@ def parse_args(argv):
     return args
 
 
-def main(argv):
+def main(argv: list[str]) -> None:
     if False:  # torch.cuda.is_available():
         device = torch.device("cuda:{}".format(torch.cuda.current_device()))
         print("[INFO] Using device:", torch.cuda.get_device_name(device))

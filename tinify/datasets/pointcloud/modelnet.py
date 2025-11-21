@@ -27,12 +27,14 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
 import os
 import os.path
 import re
 import shutil
-
 from pathlib import Path
+from typing import Any, Callable
 
 import numpy as np
 
@@ -72,7 +74,7 @@ class ModelNetDataset(CacheDataset):
     """
 
     # fmt: off
-    LABEL_LIST = {
+    LABEL_LIST: dict[str, list[str]] = {
         "10": [
             "bathtub", "bed", "chair", "desk", "dresser",
             "monitor", "night_stand", "sofa", "table", "toilet",
@@ -90,32 +92,38 @@ class ModelNetDataset(CacheDataset):
     }
     # fmt: on
 
-    LABEL_STR_TO_LABEL_INDEX = {
+    LABEL_STR_TO_LABEL_INDEX: dict[str, dict[str, int]] = {
         "10": {label: idx for idx, label in enumerate(LABEL_LIST["10"])},
         "40": {label: idx for idx, label in enumerate(LABEL_LIST["40"])},
     }
 
-    URLS = {
+    URLS: dict[str, str] = {
         "10": "http://3dvision.princeton.edu/projects/2014/3DShapeNets/ModelNet10.zip",
         "40": "http://modelnet.cs.princeton.edu/ModelNet40.zip",
     }
 
-    HASHES = {
+    HASHES: dict[str, str] = {
         "10": "9d8679435fc07d1d26f13009878db164a7aa8ea5e7ea3c8880e42794b7307d51",
         "40": "42dc3e656932e387f554e25a4eb2cc0e1a1bd3ab54606e2a9eae444c60e536ac",
     }
 
+    root: Path | None
+    cache_root: Path
+    split: str
+    split_name: str
+    name: str
+
     def __init__(
         self,
-        root=None,
-        cache_root=None,
-        split="train",
-        split_name=None,
-        name="40",
-        pre_transform=None,
-        transform=None,
-        download=True,
-    ):
+        root: str | Path | None = None,
+        cache_root: str | Path | None = None,
+        split: str = "train",
+        split_name: str | None = None,
+        name: str = "40",
+        pre_transform: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        transform: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        download: bool = True,
+    ) -> None:
         if cache_root is None:
             assert root is not None
             cache_root = f"{str(root).rstrip('/')}_cache"
@@ -137,7 +145,7 @@ class ModelNetDataset(CacheDataset):
 
         self._ensure_cache()
 
-    def download(self, force=False):
+    def download(self, force: bool = False) -> None:
         if not force and self.root.exists():
             return
         tmpdir = self.root.parent / "tmp"
@@ -147,10 +155,10 @@ class ModelNetDataset(CacheDataset):
         shutil.unpack_archive(filepath, tmpdir)
         shutil.move(tmpdir / f"ModelNet{self.name}", self.root)
 
-    def _get_items(self):
+    def _get_items(self) -> list[Path]:
         return sorted(self.root.glob(f"**/{self.split}/*.off"))
 
-    def _load_item(self, path):
+    def _load_item(self, path: Path) -> dict[str, np.ndarray]:
         label_index, file_index = self._parse_path(path)
         cloud = PyntCloud.from_file(str(path))
         return {
@@ -160,7 +168,7 @@ class ModelNetDataset(CacheDataset):
             "face": cloud.mesh.values.T,
         }
 
-    def _parse_path(self, path):
+    def _parse_path(self, path: Path) -> tuple[int, int]:
         pattern = (
             r"^.*?/?"
             r"(?P<label_str>[a-zA-Z_]+)/"

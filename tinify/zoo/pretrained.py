@@ -27,8 +27,7 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-
-from typing import Dict
+from __future__ import annotations
 
 from torch import Tensor
 
@@ -58,7 +57,7 @@ def rename_key(key: str) -> str:
     return key
 
 
-def load_pretrained(state_dict: Dict[str, Tensor]) -> Dict[str, Tensor]:
+def load_pretrained(state_dict: dict[str, Tensor]) -> dict[str, Tensor]:
     """Convert state_dict keys."""
     state_dict = {rename_key(k): v for k, v in state_dict.items()}
     return state_dict

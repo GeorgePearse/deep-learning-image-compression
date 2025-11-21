@@ -29,6 +29,8 @@
 
 from __future__ import annotations
 
+from typing import Callable
+
 import torch
 import torch.nn as nn
 
@@ -45,38 +47,44 @@ __all__ = [
 
 
 class Lambda(nn.Module):
-    def __init__(self, func):
+    func: Callable[[Tensor], Tensor]
+
+    def __init__(self, func: Callable[[Tensor], Tensor]) -> None:
         super().__init__()
         self.func = func
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"{self.__class__.__name__}(func={self.func})"
 
-    def forward(self, x):
+    def forward(self, x: Tensor) -> Tensor:
         return self.func(x)
 
 
 class NamedLayer(nn.Module):
-    def __init__(self, name: str):
+    name: str
+
+    def __init__(self, name: str) -> None:
         super().__init__()
         self.name = name
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"{self.__class__.__name__}(name={self.name})"
 
-    def forward(self, x):
+    def forward(self, x: Tensor) -> Tensor:
         return x
 
 
 class Reshape(nn.Module):
-    def __init__(self, shape):
+    shape: tuple[int, ...]
+
+    def __init__(self, shape: tuple[int, ...]) -> None:
         super().__init__()
         self.shape = shape
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"{self.__class__.__name__}(shape={self.shape})"
 
-    def forward(self, x):
+    def forward(self, x: Tensor) -> Tensor:
         output_shape = (x.shape[0], *self.shape)
         try:
             return x.reshape(output_shape)
@@ -86,20 +94,25 @@ class Reshape(nn.Module):
 
 
 class Transpose(nn.Module):
-    def __init__(self, dim0, dim1):
+    dim0: int
+    dim1: int
+
+    def __init__(self, dim0: int, dim1: int) -> None:
         super().__init__()
         self.dim0 = dim0
         self.dim1 = dim1
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"{self.__class__.__name__}(dim0={self.dim0}, dim1={self.dim1})"
 
-    def forward(self, x):
+    def forward(self, x: Tensor) -> Tensor:
         return x.transpose(self.dim0, self.dim1).contiguous()
 
 
 class Interleave(nn.Module):
-    def __init__(self, groups: int):
+    groups: int
+
+    def __init__(self, groups: int) -> None:
         super().__init__()
         self.groups = groups
 
@@ -110,7 +123,12 @@ class Interleave(nn.Module):
 
 
 class Gain(nn.Module):
-    def __init__(self, shape=None, factor: float = 1.0):
+    factor: float
+    gain: nn.Parameter
+
+    def __init__(
+        self, shape: tuple[int, ...] | None = None, factor: float = 1.0
+    ) -> None:
         super().__init__()
         self.factor = factor
         self.gain = nn.Parameter(torch.ones(shape))

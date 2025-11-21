@@ -27,7 +27,11 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
 import types
+
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -87,7 +91,7 @@ class Cheng2020AnchorCheckerboard(SimpleVAECompressionModel):
         N (int): Number of channels
     """
 
-    def __init__(self, N=192, **kwargs):
+    def __init__(self, N: int = 192, **kwargs: Any) -> None:
         super().__init__(**kwargs)
 
         self.g_a = nn.Sequential(
@@ -162,7 +166,7 @@ class Cheng2020AnchorCheckerboard(SimpleVAECompressionModel):
         )
 
     @classmethod
-    def from_state_dict(cls, state_dict):
+    def from_state_dict(cls, state_dict: dict[str, Any]) -> Cheng2020AnchorCheckerboard:
         """Return a new model instance from `state_dict`."""
         N = state_dict["g_a.0.conv1.weight"].size(0)
         net = cls(N)
@@ -193,7 +197,11 @@ class Elic2022Official(SimpleVAECompressionModel):
         groups (list[int]): Number of channels in each channel group
     """
 
-    def __init__(self, N=192, M=320, groups=None, **kwargs):
+    groups: list[int]
+
+    def __init__(
+        self, N: int = 192, M: int = 320, groups: list[int] | None = None, **kwargs: Any
+    ) -> None:
         super().__init__(**kwargs)
 
         if groups is None:
@@ -329,7 +337,7 @@ class Elic2022Official(SimpleVAECompressionModel):
         )
 
     @classmethod
-    def from_state_dict(cls, state_dict):
+    def from_state_dict(cls, state_dict: dict[str, Any]) -> Elic2022Official:
         """Return a new model instance from `state_dict`."""
         N = state_dict["g_a.0.weight"].size(0)
         net = cls(N)
@@ -374,7 +382,11 @@ class Elic2022Chandelier(SimpleVAECompressionModel):
         groups (list[int]): Number of channels in each channel group
     """
 
-    def __init__(self, N=192, M=320, groups=None, **kwargs):
+    groups: list[int]
+
+    def __init__(
+        self, N: int = 192, M: int = 320, groups: list[int] | None = None, **kwargs: Any
+    ) -> None:
         super().__init__(**kwargs)
 
         if groups is None:
@@ -517,10 +529,10 @@ class Elic2022Chandelier(SimpleVAECompressionModel):
 
         self._monkey_patch()
 
-    def _monkey_patch(self):
+    def _monkey_patch(self) -> None:
         """Monkey-patch to use only first group and most recent group."""
 
-        def merge_y(self: ChannelGroupsLatentCodec, *args):
+        def merge_y(self: ChannelGroupsLatentCodec, *args: Tensor) -> Tensor:
             if len(args) == 0:
                 return Tensor()
             if len(args) == 1:
@@ -534,7 +546,7 @@ class Elic2022Chandelier(SimpleVAECompressionModel):
         obj.merge_y = types.MethodType(merge_y, obj)
 
     @classmethod
-    def from_state_dict(cls, state_dict):
+    def from_state_dict(cls, state_dict: dict[str, Any]) -> Elic2022Chandelier:
         """Return a new model instance from `state_dict`."""
         N = state_dict["g_a.0.weight"].size(0)
         net = cls(N)
@@ -558,7 +570,14 @@ class ResidualBottleneckBlock(nn.Module):
         out_ch (int): Number of output channels
     """
 
-    def __init__(self, in_ch: int, out_ch: int):
+    conv1: nn.Module
+    conv2: nn.Module
+    conv3: nn.Module
+    relu1: nn.ReLU
+    relu2: nn.ReLU
+    skip: nn.Module
+
+    def __init__(self, in_ch: int, out_ch: int) -> None:
         super().__init__()
         mid_ch = min(in_ch, out_ch) // 2
         self.conv1 = conv1x1(in_ch, mid_ch)

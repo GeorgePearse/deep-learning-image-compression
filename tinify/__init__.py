@@ -27,6 +27,8 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
 from tinify import (
     datasets,
     entropy_models,
@@ -47,8 +49,8 @@ try:
 except ImportError:
     pass
 
-_entropy_coder = "ans"
-_available_entropy_coders = [_entropy_coder]
+_entropy_coder: str = "ans"
+_available_entropy_coders: list[str] = [_entropy_coder]
 
 try:
     import range_coder
@@ -58,7 +60,7 @@ except ImportError:
     pass
 
 
-def set_entropy_coder(entropy_coder):
+def set_entropy_coder(entropy_coder: str) -> None:
     """
     Specifies the default entropy coder used to encode the bit-streams.
 
@@ -76,21 +78,21 @@ def set_entropy_coder(entropy_coder):
     _entropy_coder = entropy_coder
 
 
-def get_entropy_coder():
+def get_entropy_coder() -> str:
     """
     Return the name of the default entropy coder used to encode the bit-streams.
     """
     return _entropy_coder
 
 
-def available_entropy_coders():
+def available_entropy_coders() -> list[str]:
     """
     Return the list of available entropy coders.
     """
     return _available_entropy_coders
 
 
-__all__ = [
+__all__: list[str] = [
     "datasets",
     "entropy_models",
     "latent_codecs",

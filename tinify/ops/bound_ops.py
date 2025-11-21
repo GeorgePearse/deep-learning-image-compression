@@ -27,18 +27,24 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
+from typing import Any
+
 import torch
 import torch.nn as nn
-
 from torch import Tensor
+from torch.autograd.function import FunctionCtx
 
 
 def lower_bound_fwd(x: Tensor, bound: Tensor) -> Tensor:
     return torch.max(x, bound)
 
 
-def lower_bound_bwd(x: Tensor, bound: Tensor, grad_output: Tensor):
-    pass_through_if = (x >= bound) | (grad_output < 0)
+def lower_bound_bwd(
+    x: Tensor, bound: Tensor, grad_output: Tensor
+) -> tuple[Tensor, None]:
+    pass_through_if: Tensor = (x >= bound) | (grad_output < 0)
     return pass_through_if * grad_output, None
 
 
@@ -46,12 +52,12 @@ class LowerBoundFunction(torch.autograd.Function):
     """Autograd function for the `LowerBound` operator."""
 
     @staticmethod
-    def forward(ctx, x, bound):
+    def forward(ctx: FunctionCtx, x: Tensor, bound: Tensor) -> Tensor:
         ctx.save_for_backward(x, bound)
         return lower_bound_fwd(x, bound)
 
     @staticmethod
-    def backward(ctx, grad_output):
+    def backward(ctx: FunctionCtx, grad_output: Tensor) -> tuple[Tensor, None]:
         x, bound = ctx.saved_tensors
         return lower_bound_bwd(x, bound, grad_output)
 
@@ -66,15 +72,15 @@ class LowerBound(nn.Module):
 
     bound: Tensor
 
-    def __init__(self, bound: float):
+    def __init__(self, bound: float) -> None:
         super().__init__()
         self.register_buffer("bound", torch.Tensor([float(bound)]))
 
     @torch.jit.unused
-    def lower_bound(self, x):
+    def lower_bound(self, x: Tensor) -> Tensor:
         return LowerBoundFunction.apply(x, self.bound)
 
-    def forward(self, x):
+    def forward(self, x: Tensor) -> Tensor:
         if torch.jit.is_scripting():
             return torch.max(x, self.bound)
         return self.lower_bound(x)

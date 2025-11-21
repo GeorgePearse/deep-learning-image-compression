@@ -27,16 +27,16 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import warnings
+from __future__ import annotations
 
-from typing import Any, Callable, List, Optional, Tuple, Union
+import warnings
+from typing import Any, Callable
 
 import numpy as np
 import scipy.stats
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
 from torch import Tensor
 
 from tinify._CXX import pmf_to_quantized_cdf as _pmf_to_quantized_cdf
@@ -46,7 +46,11 @@ from tinify.ops import LowerBound
 class _EntropyCoder:
     """Proxy class to an actual entropy coder class."""
 
-    def __init__(self, method):
+    name: str
+    _encoder: Any
+    _decoder: Any
+
+    def __init__(self, method: str) -> None:
         if not isinstance(method, str):
             raise ValueError(f'Invalid method type "{type(method)}"')
 
@@ -71,14 +75,14 @@ class _EntropyCoder:
         self._encoder = encoder
         self._decoder = decoder
 
-    def encode_with_indexes(self, *args, **kwargs):
+    def encode_with_indexes(self, *args: Any, **kwargs: Any) -> bytes:
         return self._encoder.encode_with_indexes(*args, **kwargs)
 
-    def decode_with_indexes(self, *args, **kwargs):
+    def decode_with_indexes(self, *args: Any, **kwargs: Any) -> list[int]:
         return self._decoder.decode_with_indexes(*args, **kwargs)
 
 
-def default_entropy_coder():
+def default_entropy_coder() -> str:
     from tinify import get_entropy_coder
 
     return get_entropy_coder()
@@ -90,7 +94,7 @@ def pmf_to_quantized_cdf(pmf: Tensor, precision: int = 16) -> Tensor:
     return cdf
 
 
-def _forward(self, *args: Any) -> Any:
+def _forward(self: EntropyModel, *args: Any) -> Any:
     raise NotImplementedError()
 
 
@@ -104,12 +108,20 @@ class EntropyModel(nn.Module):
         entropy_coder_precision (int): set the entropy coder precision
     """
 
+    entropy_coder: _EntropyCoder
+    entropy_coder_precision: int
+    use_likelihood_bound: bool
+    likelihood_lower_bound: LowerBound
+    _offset: Tensor
+    _quantized_cdf: Tensor
+    _cdf_length: Tensor
+
     def __init__(
         self,
         likelihood_bound: float = 1e-9,
-        entropy_coder: Optional[str] = None,
+        entropy_coder: str | None = None,
         entropy_coder_precision: int = 16,
-    ):
+    ) -> None:
         super().__init__()
 
         if entropy_coder is None:
@@ -126,32 +138,32 @@ class EntropyModel(nn.Module):
         self.register_buffer("_quantized_cdf", torch.IntTensor())
         self.register_buffer("_cdf_length", torch.IntTensor())
 
-    def __getstate__(self):
+    def __getstate__(self) -> dict[str, Any]:
         attributes = self.__dict__.copy()
         attributes["entropy_coder"] = self.entropy_coder.name
         return attributes
 
-    def __setstate__(self, state):
+    def __setstate__(self, state: dict[str, Any]) -> None:
         self.__dict__ = state
         self.entropy_coder = _EntropyCoder(self.__dict__.pop("entropy_coder"))
 
     @property
-    def offset(self):
+    def offset(self) -> Tensor:
         return self._offset
 
     @property
-    def quantized_cdf(self):
+    def quantized_cdf(self) -> Tensor:
         return self._quantized_cdf
 
     @property
-    def cdf_length(self):
+    def cdf_length(self) -> Tensor:
         return self._cdf_length
 
     # See: https://github.com/python/mypy/issues/8795
     forward: Callable[..., Any] = _forward
 
     def quantize(
-        self, inputs: Tensor, mode: str, means: Optional[Tensor] = None
+        self, inputs: Tensor, mode: str, means: Tensor | None = None
     ) -> Tensor:
         if mode not in ("noise", "dequantize", "symbols"):
             raise ValueError(f'Invalid quantization mode: "{mode}"')
@@ -178,14 +190,14 @@ class EntropyModel(nn.Module):
         return outputs
 
     def _quantize(
-        self, inputs: Tensor, mode: str, means: Optional[Tensor] = None
+        self, inputs: Tensor, mode: str, means: Tensor | None = None
     ) -> Tensor:
         warnings.warn("_quantize is deprecated. Use quantize instead.", stacklevel=2)
         return self.quantize(inputs, mode, means)
 
     @staticmethod
     def dequantize(
-        inputs: Tensor, means: Optional[Tensor] = None, dtype: torch.dtype = torch.float
+        inputs: Tensor, means: Tensor | None = None, dtype: torch.dtype = torch.float
     ) -> Tensor:
         if means is not None:
             outputs = inputs.type_as(means)
@@ -195,11 +207,13 @@ class EntropyModel(nn.Module):
         return outputs
 
     @classmethod
-    def _dequantize(cls, inputs: Tensor, means: Optional[Tensor] = None) -> Tensor:
+    def _dequantize(cls, inputs: Tensor, means: Tensor | None = None) -> Tensor:
         warnings.warn("_dequantize. Use dequantize instead.", stacklevel=2)
         return cls.dequantize(inputs, means)
 
-    def _pmf_to_cdf(self, pmf, tail_mass, pmf_length, max_length):
+    def _pmf_to_cdf(
+        self, pmf: Tensor, tail_mass: Tensor, pmf_length: Tensor, max_length: int
+    ) -> Tensor:
         cdf = torch.zeros(
             (len(pmf_length), max_length + 2), dtype=torch.int32, device=pmf.device
         )
@@ -209,21 +223,21 @@ class EntropyModel(nn.Module):
             cdf[i, : _cdf.size(0)] = _cdf
         return cdf
 
-    def _check_cdf_size(self):
+    def _check_cdf_size(self) -> None:
         if self._quantized_cdf.numel() == 0:
             raise ValueError("Uninitialized CDFs. Run update() first")
 
         if len(self._quantized_cdf.size()) != 2:
             raise ValueError(f"Invalid CDF size {self._quantized_cdf.size()}")
 
-    def _check_offsets_size(self):
+    def _check_offsets_size(self) -> None:
         if self._offset.numel() == 0:
             raise ValueError("Uninitialized offsets. Run update() first")
 
         if len(self._offset.size()) != 1:
             raise ValueError(f"Invalid offsets size {self._offset.size()}")
 
-    def _check_cdf_length(self):
+    def _check_cdf_length(self) -> None:
         if self._cdf_length.numel() == 0:
             raise ValueError("Uninitialized CDF lengths. Run update() first")
 
@@ -232,10 +246,10 @@ class EntropyModel(nn.Module):
 
     def compress(
         self,
-        inputs: torch.Tensor,
-        indexes: torch.Tensor,
-        means: Optional[torch.Tensor] = None,
-    ):
+        inputs: Tensor,
+        indexes: Tensor,
+        means: Tensor | None = None,
+    ) -> list[bytes]:
         """
         Compress input tensors to char strings.
 
@@ -258,7 +272,7 @@ class EntropyModel(nn.Module):
         self._check_cdf_length()
         self._check_offsets_size()
 
-        strings = []
+        strings: list[bytes] = []
         for i in range(symbols.size(0)):
             rv = self.entropy_coder.encode_with_indexes(
                 symbols[i].reshape(-1).int().tolist(),
@@ -272,11 +286,11 @@ class EntropyModel(nn.Module):
 
     def decompress(
         self,
-        strings: List[bytes],
-        indexes: torch.Tensor,
+        strings: list[bytes],
+        indexes: Tensor,
         dtype: torch.dtype = torch.float,
-        means: Optional[torch.Tensor] = None,
-    ):
+        means: Tensor | None = None,
+    ) -> Tensor:
         """
         Decompress char strings to tensors.
 
@@ -329,7 +343,7 @@ class EntropyModel(nn.Module):
 
 
 class EntropyBottleneck(EntropyModel):
-    r"""Entropy bottleneck layer, introduced by J. Ballé, D. Minnen, S. Singh,
+    r"""Entropy bottleneck layer, introduced by J. Balle, D. Minnen, S. Singh,
     S. J. Hwang, N. Johnston, in `"Variational image compression with a scale
     hyperprior" <https://arxiv.org/abs/1802.01436>`_.
 
@@ -341,6 +355,15 @@ class EntropyBottleneck(EntropyModel):
     """
 
     _offset: Tensor
+    channels: int
+    filters: tuple[int, ...]
+    init_scale: float
+    tail_mass: float
+    matrices: nn.ParameterList
+    biases: nn.ParameterList
+    factors: nn.ParameterList
+    quantiles: nn.Parameter
+    target: Tensor
 
     def __init__(
         self,
@@ -348,9 +371,9 @@ class EntropyBottleneck(EntropyModel):
         *args: Any,
         tail_mass: float = 1e-9,
         init_scale: float = 10,
-        filters: Tuple[int, ...] = (3, 3, 3, 3),
+        filters: tuple[int, ...] = (3, 3, 3, 3),
         **kwargs: Any,
-    ):
+    ) -> None:
         super().__init__(*args, **kwargs)
 
         self.channels = int(channels)
@@ -459,16 +482,14 @@ class EntropyBottleneck(EntropyModel):
 
     def _likelihood(
         self, inputs: Tensor, stop_gradient: bool = False
-    ) -> Tuple[Tensor, Tensor, Tensor]:
+    ) -> tuple[Tensor, Tensor, Tensor]:
         half = float(0.5)
         lower = self._logits_cumulative(inputs - half, stop_gradient=stop_gradient)
         upper = self._logits_cumulative(inputs + half, stop_gradient=stop_gradient)
         likelihood = torch.sigmoid(upper) - torch.sigmoid(lower)
         return likelihood, lower, upper
 
-    def forward(
-        self, x: Tensor, training: Optional[bool] = None
-    ) -> Tuple[Tensor, Tensor]:
+    def forward(self, x: Tensor, training: bool | None = None) -> tuple[Tensor, Tensor]:
         if training is None:
             training = self.training
 
@@ -504,7 +525,7 @@ class EntropyBottleneck(EntropyModel):
         return outputs, likelihood
 
     @staticmethod
-    def _build_indexes(size):
+    def _build_indexes(size: torch.Size) -> Tensor:
         dims = len(size)
         N = size[0]
         C = size[1]
@@ -517,11 +538,13 @@ class EntropyBottleneck(EntropyModel):
         return indexes.repeat(N, 1, *size[2:])
 
     @staticmethod
-    def _extend_ndims(tensor, n):
+    def _extend_ndims(tensor: Tensor, n: int) -> Tensor:
         return tensor.reshape(-1, *([1] * n)) if n > 0 else tensor.reshape(-1)
 
     @torch.no_grad()
-    def _update_quantiles(self, search_radius=1e5, rtol=1e-4, atol=1e-3):
+    def _update_quantiles(
+        self, search_radius: float = 1e5, rtol: float = 1e-4, atol: float = 1e-3
+    ) -> None:
         """Fast quantile update via bisection search.
 
         Often faster and much more precise than minimizing aux loss.
@@ -531,7 +554,7 @@ class EntropyBottleneck(EntropyModel):
         low = torch.full(shape, -search_radius, device=device)
         high = torch.full(shape, search_radius, device=device)
 
-        def f(y, self=self):
+        def f(y: Tensor, self: EntropyBottleneck = self) -> Tensor:
             return self._logits_cumulative(y, stop_gradient=True)
 
         for i in range(len(self.target)):
@@ -539,7 +562,15 @@ class EntropyBottleneck(EntropyModel):
             self.quantiles[:, :, i] = q_i[:, :, 0]
 
     @staticmethod
-    def _search_target(f, target, low, high, rtol=1e-4, atol=1e-3, strict=False):
+    def _search_target(
+        f: Callable[[Tensor], Tensor],
+        target: Tensor,
+        low: Tensor,
+        high: Tensor,
+        rtol: float = 1e-4,
+        atol: float = 1e-3,
+        strict: bool = False,
+    ) -> Tensor:
         assert (low <= high).all()
         if strict:
             assert ((f(low) <= target) & (target <= f(high))).all()
@@ -553,7 +584,7 @@ class EntropyBottleneck(EntropyModel):
             high = torch.where(f_mid >= target, mid, high)
         return (low + high) / 2
 
-    def compress(self, x):
+    def compress(self, x: Tensor) -> list[bytes]:
         indexes = self._build_indexes(x.size())
         medians = self._get_medians().detach()
         spatial_dims = len(x.size()) - 2
@@ -561,7 +592,7 @@ class EntropyBottleneck(EntropyModel):
         medians = medians.expand(x.size(0), *([-1] * (spatial_dims + 1)))
         return super().compress(x, indexes, medians)
 
-    def decompress(self, strings, size):
+    def decompress(self, strings: list[bytes], size: tuple[int, ...]) -> Tensor:
         output_size = (len(strings), self._quantized_cdf.size(0), *size)
         indexes = self._build_indexes(output_size).to(self._quantized_cdf.device)
         medians = self._extend_ndims(self._get_medians().detach(), len(size))
@@ -570,7 +601,7 @@ class EntropyBottleneck(EntropyModel):
 
 
 class GaussianConditional(EntropyModel):
-    r"""Gaussian conditional layer, introduced by J. Ballé, D. Minnen, S. Singh,
+    r"""Gaussian conditional layer, introduced by J. Balle, D. Minnen, S. Singh,
     S. J. Hwang, N. Johnston, in `"Variational image compression with a scale
     hyperprior" <https://arxiv.org/abs/1802.01436>`_.
 
@@ -580,14 +611,19 @@ class GaussianConditional(EntropyModel):
     for more information.
     """
 
+    tail_mass: float
+    lower_bound_scale: LowerBound
+    scale_table: Tensor
+    scale_bound: Tensor | None
+
     def __init__(
         self,
-        scale_table: Optional[Union[List, Tuple]],
+        scale_table: list[float] | tuple[float, ...] | None,
         *args: Any,
         scale_bound: float = 0.11,
         tail_mass: float = 1e-9,
         **kwargs: Any,
-    ):
+    ) -> None:
         super().__init__(*args, **kwargs)
 
         if not isinstance(scale_table, (type(None), list, tuple)):
@@ -619,7 +655,9 @@ class GaussianConditional(EntropyModel):
         )
 
     @staticmethod
-    def _prepare_scale_table(scale_table):
+    def _prepare_scale_table(
+        scale_table: list[float] | tuple[float, ...],
+    ) -> Tensor:
         return torch.Tensor(tuple(float(s) for s in scale_table))
 
     def _standardized_cumulative(self, inputs: Tensor) -> Tensor:
@@ -629,10 +667,12 @@ class GaussianConditional(EntropyModel):
         return half * torch.erfc(const * inputs)
 
     @staticmethod
-    def _standardized_quantile(quantile):
+    def _standardized_quantile(quantile: float) -> float:
         return scipy.stats.norm.ppf(quantile)
 
-    def update_scale_table(self, scale_table, force=False):
+    def update_scale_table(
+        self, scale_table: list[float] | tuple[float, ...], force: bool = False
+    ) -> bool:
         # Check if we need to update the gaussian conditional parameters, the
         # offsets are only computed and stored when the conditonal model is
         # updated.
@@ -643,7 +683,7 @@ class GaussianConditional(EntropyModel):
         self.update()
         return True
 
-    def update(self):
+    def update(self) -> None:
         multiplier = -self._standardized_quantile(self.tail_mass / 2)
         pmf_center = torch.ceil(self.scale_table * multiplier).int()
         pmf_length = 2 * pmf_center + 1
@@ -668,7 +708,7 @@ class GaussianConditional(EntropyModel):
         self._cdf_length = pmf_length + 2
 
     def _likelihood(
-        self, inputs: Tensor, scales: Tensor, means: Optional[Tensor] = None
+        self, inputs: Tensor, scales: Tensor, means: Tensor | None = None
     ) -> Tensor:
         half = float(0.5)
 
@@ -690,9 +730,9 @@ class GaussianConditional(EntropyModel):
         self,
         inputs: Tensor,
         scales: Tensor,
-        means: Optional[Tensor] = None,
-        training: Optional[bool] = None,
-    ) -> Tuple[Tensor, Tensor]:
+        means: Tensor | None = None,
+        training: bool | None = None,
+    ) -> tuple[Tensor, Tensor]:
         if training is None:
             training = self.training
         outputs = self.quantize(inputs, "noise" if training else "dequantize", means)
@@ -710,13 +750,15 @@ class GaussianConditional(EntropyModel):
 
 
 class GaussianMixtureConditional(GaussianConditional):
+    K: int
+
     def __init__(
         self,
-        K=3,
-        scale_table: Optional[Union[List, Tuple]] = None,
+        K: int = 3,
+        scale_table: list[float] | tuple[float, ...] | None = None,
         *args: Any,
         **kwargs: Any,
-    ):
+    ) -> None:
         super().__init__(scale_table, *args, **kwargs)
 
         self.K = K
@@ -745,8 +787,8 @@ class GaussianMixtureConditional(GaussianConditional):
         scales: Tensor,
         means: Tensor,
         weights: Tensor,
-        training: Optional[bool] = None,
-    ) -> Tuple[Tensor, Tensor]:
+        training: bool | None = None,
+    ) -> tuple[Tensor, Tensor]:
         if training is None:
             training = self.training
         outputs = self.quantize(
@@ -758,7 +800,9 @@ class GaussianMixtureConditional(GaussianConditional):
         return outputs, likelihood
 
     @torch.no_grad()
-    def _build_cdf(self, scales, means, weights, abs_max):
+    def _build_cdf(
+        self, scales: Tensor, means: Tensor, weights: Tensor, abs_max: int
+    ) -> Tensor:
         num_latents = scales.size(1)
         num_samples = abs_max * 2 + 1
         TINY = 1e-10
@@ -840,7 +884,9 @@ class GaussianMixtureConditional(GaussianConditional):
 
         return cdf
 
-    def reshape_entropy_parameters(self, scales, means, weights, nonzero):
+    def reshape_entropy_parameters(
+        self, scales: Tensor, means: Tensor, weights: Tensor, nonzero: list[int]
+    ) -> tuple[Tensor, Tensor, Tensor]:
         reshape_size = (scales.size(0), self.K, scales.size(1) // self.K, -1)
 
         scales = (
@@ -860,7 +906,9 @@ class GaussianMixtureConditional(GaussianConditional):
         )
         return scales, means, weights
 
-    def compress(self, y, scales, means, weights):
+    def compress(
+        self, y: Tensor, scales: Tensor, means: Tensor, weights: Tensor
+    ) -> tuple[tuple[bytes, int, Tensor], Tensor]:
         abs_max = (
             max(torch.abs(y.max()).int().item(), torch.abs(y.min()).int().item()) + 1
         )
@@ -896,7 +944,15 @@ class GaussianMixtureConditional(GaussianConditional):
 
         return (rv, abs_max, zero_bitmap), y_quantized
 
-    def decompress(self, strings, abs_max, zero_bitmap, scales, means, weights):
+    def decompress(
+        self,
+        strings: bytes,
+        abs_max: int,
+        zero_bitmap: Tensor,
+        scales: Tensor,
+        means: Tensor,
+        weights: Tensor,
+    ) -> Tensor:
         nonzero = torch.nonzero(zero_bitmap).flatten().tolist()
         cdf = self._build_cdf(
             *self.reshape_entropy_parameters(scales, means, weights, nonzero), abs_max

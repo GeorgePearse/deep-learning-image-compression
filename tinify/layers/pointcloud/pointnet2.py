@@ -55,15 +55,20 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+from __future__ import annotations
+
 from concurrent.futures.thread import ThreadPoolExecutor
+from typing import Any
 
 import numpy as np
+import numpy.typing as npt
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch import Tensor
 
 
-def pc_normalize(pc):
+def pc_normalize(pc: npt.NDArray[np.floating[Any]]) -> npt.NDArray[np.floating[Any]]:
     centroid = np.mean(pc, axis=0)
     pc = pc - centroid
     m = np.max(np.sqrt(np.sum(pc**2, axis=1)))
@@ -71,7 +76,7 @@ def pc_normalize(pc):
     return pc
 
 
-def square_distance(src, dst):
+def square_distance(src: Tensor, dst: Tensor) -> Tensor:
     """
     Calculate Euclid distance between each two points.
 
@@ -95,7 +100,7 @@ def square_distance(src, dst):
     return dist
 
 
-def index_points(points, idx):
+def index_points(points: Tensor, idx: Tensor) -> Tensor:
     """
 
     Input:
@@ -120,7 +125,9 @@ def index_points(points, idx):
     return new_points
 
 
-def farthest_point_sample(xyz, npoint, _method="pointops"):
+def farthest_point_sample(
+    xyz: Tensor, npoint: int, _method: str = "pointops"
+) -> Tensor:
     """
     Input:
         xyz: pointcloud data, [B, N, 3]
@@ -163,7 +170,7 @@ def farthest_point_sample(xyz, npoint, _method="pointops"):
     raise ValueError(f"Unknown method {_method}")
 
 
-def _farthest_point_sample_yanx27(xyz, npoint):
+def _farthest_point_sample_yanx27(xyz: Tensor, npoint: int) -> Tensor:
     device = xyz.device
     B, N, C = xyz.shape
     centroids = torch.zeros(B, npoint, dtype=torch.long).to(device)
@@ -180,7 +187,9 @@ def _farthest_point_sample_yanx27(xyz, npoint):
     return centroids
 
 
-def query_ball_point(radius, nsample, xyz, new_xyz, _method="pointops"):
+def query_ball_point(
+    radius: float, nsample: int, xyz: Tensor, new_xyz: Tensor, _method: str = "pointops"
+) -> Tensor:
     """
     Input:
         radius: local region radius
@@ -210,7 +219,9 @@ def query_ball_point(radius, nsample, xyz, new_xyz, _method="pointops"):
     raise ValueError(f"Unknown method {_method}")
 
 
-def _query_ball_point_yanx27(radius, nsample, xyz, new_xyz):
+def _query_ball_point_yanx27(
+    radius: float, nsample: int, xyz: Tensor, new_xyz: Tensor
+) -> Tensor:
     device = xyz.device
     B, N, C = xyz.shape
     _, S, _ = new_xyz.shape
@@ -226,7 +237,14 @@ def _query_ball_point_yanx27(radius, nsample, xyz, new_xyz):
     return group_idx
 
 
-def sample_and_group(npoint, radius, nsample, xyz, points, returnfps=False):
+def sample_and_group(
+    npoint: int,
+    radius: float,
+    nsample: int,
+    xyz: Tensor,
+    points: Tensor | None,
+    returnfps: bool = False,
+) -> tuple[Tensor, Tensor] | tuple[Tensor, Tensor, Tensor, Tensor]:
     """
     Input:
         npoint:
@@ -259,7 +277,9 @@ def sample_and_group(npoint, radius, nsample, xyz, points, returnfps=False):
         return new_xyz, new_points
 
 
-def sample_and_group_all(xyz, points, returnfps=False):
+def sample_and_group_all(
+    xyz: Tensor, points: Tensor | None, returnfps: bool = False
+) -> tuple[Tensor, Tensor] | tuple[Tensor, Tensor, Tensor, Tensor]:
     """
     Input:
         xyz: input points position data, [B, N, 3]
@@ -284,7 +304,22 @@ def sample_and_group_all(xyz, points, returnfps=False):
 
 
 class PointNetSetAbstraction(nn.Module):
-    def __init__(self, npoint, radius, nsample, in_channel, mlp, group_all):
+    npoint: int | None
+    radius: float
+    nsample: int
+    mlp_convs: nn.ModuleList
+    mlp_bns: nn.ModuleList
+    group_all: bool
+
+    def __init__(
+        self,
+        npoint: int | None,
+        radius: float,
+        nsample: int,
+        in_channel: int,
+        mlp: list[int],
+        group_all: bool,
+    ) -> None:
         super(PointNetSetAbstraction, self).__init__()
         self.npoint = npoint
         self.radius = radius
@@ -298,7 +333,7 @@ class PointNetSetAbstraction(nn.Module):
             last_channel = out_channel
         self.group_all = group_all
 
-    def forward(self, xyz, points):
+    def forward(self, xyz: Tensor, points: Tensor | None) -> dict[str, Tensor]:
         """
         Input:
             xyz: input points position data, [B, C, N]
@@ -355,7 +390,20 @@ class PointNetSetAbstraction(nn.Module):
 
 
 class PointNetSetAbstractionMsg(nn.Module):
-    def __init__(self, npoint, radius_list, nsample_list, in_channel, mlp_list):
+    npoint: int
+    radius_list: list[float]
+    nsample_list: list[int]
+    conv_blocks: nn.ModuleList
+    bn_blocks: nn.ModuleList
+
+    def __init__(
+        self,
+        npoint: int,
+        radius_list: list[float],
+        nsample_list: list[int],
+        in_channel: int,
+        mlp_list: list[list[int]],
+    ) -> None:
         super(PointNetSetAbstractionMsg, self).__init__()
         self.npoint = npoint
         self.radius_list = radius_list
@@ -373,7 +421,7 @@ class PointNetSetAbstractionMsg(nn.Module):
             self.conv_blocks.append(convs)
             self.bn_blocks.append(bns)
 
-    def forward(self, xyz, points):
+    def forward(self, xyz: Tensor, points: Tensor | None) -> tuple[Tensor, Tensor]:
         """
         Input:
             xyz: input points position data, [B, C, N]
@@ -415,7 +463,10 @@ class PointNetSetAbstractionMsg(nn.Module):
 
 
 class PointNetFeaturePropagation(nn.Module):
-    def __init__(self, in_channel, mlp):
+    mlp_convs: nn.ModuleList
+    mlp_bns: nn.ModuleList
+
+    def __init__(self, in_channel: int, mlp: list[int]) -> None:
         super(PointNetFeaturePropagation, self).__init__()
         self.mlp_convs = nn.ModuleList()
         self.mlp_bns = nn.ModuleList()
@@ -425,7 +476,9 @@ class PointNetFeaturePropagation(nn.Module):
             self.mlp_bns.append(nn.BatchNorm1d(out_channel))
             last_channel = out_channel
 
-    def forward(self, xyz1, xyz2, points1, points2):
+    def forward(
+        self, xyz1: Tensor, xyz2: Tensor, points1: Tensor | None, points2: Tensor
+    ) -> Tensor:
         """
         Input:
             xyz1: input points position data, [B, C, N]

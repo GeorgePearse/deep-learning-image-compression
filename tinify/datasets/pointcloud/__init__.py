@@ -27,12 +27,14 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
 from .modelnet import ModelNetDataset
 from .s3dis import S3disDataset
 from .semantic_kitti import SemanticKittiDataset
 from .shapenet import ShapeNetCorePartDataset
 
-__all__ = [
+__all__: list[str] = [
     "ModelNetDataset",
     "S3disDataset",
     "SemanticKittiDataset",

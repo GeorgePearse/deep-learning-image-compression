@@ -27,11 +27,13 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
 import os
 import re
 import shutil
-
 from pathlib import Path
+from typing import Any, Callable
 
 import numpy as np
 
@@ -94,7 +96,7 @@ class SemanticKittiDataset(CacheDataset):
             <https://paperswithcode.com/dataset/semantickitti>`_
     """
 
-    URLS = [
+    URLS: list[str] = [
         "https://s3.eu-central-1.amazonaws.com/avg-kitti/data_odometry_calib.zip",
         "https://s3.eu-central-1.amazonaws.com/avg-kitti/data_odometry_velodyne.zip",
         "http://www.semantic-kitti.org/assets/data_odometry_labels.zip",
@@ -102,7 +104,7 @@ class SemanticKittiDataset(CacheDataset):
         "http://www.semantic-kitti.org/assets/data_odometry_voxels.zip",
     ]
 
-    HASHES = [
+    HASHES: list[str] = [
         "fa45d2bbff828776e6df689b161415fb7cd719345454b6d3567c2ff81fa4d075",  # data_odometry_calib.zip
         "062a45667bec6874ac27f733bd6809919f077265e7ac0bb25ac885798fa85ab5",  # data_odometry_velodyne.zip
         "408ec524636a393bae0288a0b2f48bf5418a1af988e82dee8496f89ddb7e6dda",  # data_odometry_labels.zip
@@ -111,7 +113,7 @@ class SemanticKittiDataset(CacheDataset):
     ]
 
     # Suggested splits:
-    SEQUENCES = {
+    SEQUENCES: dict[str, tuple[int, ...]] = {
         "train": (0, 1, 2, 3, 4, 5, 6, 7, 9, 10),
         "valid": (8,),
         "infer": (8,),
@@ -119,13 +121,13 @@ class SemanticKittiDataset(CacheDataset):
     }
 
     # fmt: off
-    NUM_SAMPLES_PER_SEQUENCE = [
+    NUM_SAMPLES_PER_SEQUENCE: list[int] = [
         4541, 1101, 4661, 801, 271, 2761, 1101, 1101, 4071, 1591, 1201,
         921, 1061, 3281, 631, 1901, 1731, 491, 1801, 4981, 831, 2721
     ]
     # fmt: on
 
-    RAW_SEMANTIC_INDEX_TO_LABEL = {
+    RAW_SEMANTIC_INDEX_TO_LABEL: dict[int, str] = {
         0: "unlabeled",
         1: "outlier",
         10: "car",
@@ -162,21 +164,27 @@ class SemanticKittiDataset(CacheDataset):
         259: "moving-other-vehicle",
     }
 
-    RAW_SEMANTIC_INDEX_TO_SEMANTIC_INDEX = {
+    RAW_SEMANTIC_INDEX_TO_SEMANTIC_INDEX: dict[int, int] = {
         idx: i for i, idx in enumerate(RAW_SEMANTIC_INDEX_TO_LABEL)
     }
 
+    root: Path | None
+    cache_root: Path
+    split: str
+    split_name: str
+    sequences: tuple[int, ...]
+
     def __init__(
         self,
-        root=None,
-        cache_root=None,
-        split="train",
-        split_name=None,
-        sequences=SEQUENCES["train"],
-        pre_transform=None,
-        transform=None,
-        download=True,
-    ):
+        root: str | Path | None = None,
+        cache_root: str | Path | None = None,
+        split: str = "train",
+        split_name: str | None = None,
+        sequences: tuple[int, ...] = SEQUENCES["train"],
+        pre_transform: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        transform: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        download: bool = True,
+    ) -> None:
         if cache_root is None:
             assert root is not None
             cache_root = f"{str(root).rstrip('/')}_cache"
@@ -198,7 +206,7 @@ class SemanticKittiDataset(CacheDataset):
 
         self._ensure_cache()
 
-    def download(self, force=False):
+    def download(self, force: bool = False) -> None:
         if not force and self.root.exists():
             return
         tmpdir = self.root.parent / "tmp"
@@ -211,14 +219,14 @@ class SemanticKittiDataset(CacheDataset):
             assert expected_hash == hash_file(filepath, method="sha256")
         shutil.move(tmpdir / "dataset", self.root)
 
-    def _get_items(self):
+    def _get_items(self) -> list[Path]:
         return sorted(
             x
             for i in self.sequences
             for x in self.root.glob(f"**/{i:02}/velodyne/*.bin")
         )
 
-    def _load_item(self, path):
+    def _load_item(self, path: Path) -> dict[str, np.ndarray]:
         path_prefix, sequence_index, file_index = self._parse_path(path)
         assert str(path) == f"{path_prefix}{sequence_index}/velodyne/{file_index}.bin"
         point_data = np.fromfile(path, dtype=np.float32).reshape(-1, 4)
@@ -242,7 +250,7 @@ class SemanticKittiDataset(CacheDataset):
             "remission": point_data[:, 3, None],
         }
 
-    def _parse_path(self, path):
+    def _parse_path(self, path: Path) -> tuple[str, str, str]:
         pattern = (
             r"^(?P<path_prefix>.*?/?)"
             r"(?P<sequence_index>\d+)/"
@@ -258,7 +266,7 @@ class SemanticKittiDataset(CacheDataset):
         return path_prefix, sequence_index, file_index
 
 
-def np_remap(arr, d):
+def np_remap(arr: np.ndarray, d: dict[int, int]) -> np.ndarray:
     values, inverse = np.unique(arr, return_inverse=True)
     values = np.array([d[x] for x in values], dtype=arr.dtype)
     return values[inverse].reshape(arr.shape)

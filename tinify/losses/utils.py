@@ -27,17 +27,24 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
 
-def compute_rate_loss(likelihoods, batch_size, bit_per_bpp):
-    out_bit = {
+import torch
+from torch import Tensor
+
+
+def compute_rate_loss(
+    likelihoods: dict[str, Tensor], batch_size: int, bit_per_bpp: int | float
+) -> dict[str, Tensor]:
+    out_bit: dict[str, Tensor] = {
         f"bit_{name}_loss": lh.log2().sum() / -batch_size
         for name, lh in likelihoods.items()
     }
-    out_bpp = {
+    out_bpp: dict[str, Tensor] = {
         f"bpp_{name}_loss": out_bit[f"bit_{name}_loss"] / bit_per_bpp
         for name in likelihoods.keys()
     }
-    out = {**out_bit, **out_bpp}
-    out["bit_loss"] = sum(out_bit.values())
+    out: dict[str, Tensor] = {**out_bit, **out_bpp}
+    out["bit_loss"] = torch.stack(list(out_bit.values())).sum()
     out["bpp_loss"] = out["bit_loss"] / bit_per_bpp
     return out

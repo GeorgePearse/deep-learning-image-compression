@@ -31,9 +31,12 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch import Tensor
 
 from tinify.layers.pointcloud.hrtzxf2022 import index_points
 from tinify.losses.utils import compute_rate_loss
@@ -54,7 +57,7 @@ class RateDistortionLoss_hrtzxf2022(nn.Module):
             CVPR 2022.
     """
 
-    LMBDA_DEFAULT = {
+    LMBDA_DEFAULT: dict[str, float | tuple[float, ...]] = {
         "bpp": 1.0,
         "chamfer": 1e4,
         "chamfer_layers": (1.0, 0.1, 0.1),
@@ -65,22 +68,28 @@ class RateDistortionLoss_hrtzxf2022(nn.Module):
         "upsample_num": 1.0,
     }
 
+    lmbda: dict[str, float | tuple[float, ...]]
+    compress_normal: bool
+    latent_xyzs_codec_mode: str
+
     def __init__(
         self,
-        lmbda=None,
-        compress_normal=False,
-        latent_xyzs_codec_mode="learned",
-    ):
+        lmbda: dict[str, float | tuple[float, ...]] | None = None,
+        compress_normal: bool = False,
+        latent_xyzs_codec_mode: str = "learned",
+    ) -> None:
         super().__init__()
         self.lmbda = lmbda or dict(self.LMBDA_DEFAULT)
         self.compress_normal = compress_normal
         self.latent_xyzs_codec_mode = latent_xyzs_codec_mode
 
-    def forward(self, output, target):
+    def forward(
+        self, output: dict[str, Any], target: dict[str, Tensor]
+    ) -> dict[str, Tensor]:
         device = target["pos"].device
         B, P, _ = target["pos"].shape
 
-        out = {}
+        out: dict[str, Tensor] = {}
 
         chamfer_loss_, nearest_gt_idx_ = get_chamfer_loss(
             output["gt_xyz_"],
@@ -140,10 +149,12 @@ class RateDistortionLoss_hrtzxf2022(nn.Module):
         return out
 
 
-def get_chamfer_loss(gt_xyzs_, xyzs_hat_):
+def get_chamfer_loss(
+    gt_xyzs_: list[Tensor], xyzs_hat_: list[Tensor]
+) -> tuple[list[Tensor], list[Tensor]]:
     num_layers = len(gt_xyzs_)
-    chamfer_loss_ = []
-    nearest_gt_idx_ = []
+    chamfer_loss_: list[Tensor] = []
+    nearest_gt_idx_: list[Tensor] = []
 
     for i in range(num_layers):
         xyzs1 = gt_xyzs_[i]
@@ -155,11 +166,17 @@ def get_chamfer_loss(gt_xyzs_, xyzs_hat_):
     return chamfer_loss_, nearest_gt_idx_
 
 
-def get_density_loss(gt_dnums_, gt_mdis_, unums_hat_, mdis_hat_, nearest_gt_idx_):
+def get_density_loss(
+    gt_dnums_: list[Tensor],
+    gt_mdis_: list[Tensor],
+    unums_hat_: list[Tensor],
+    mdis_hat_: list[Tensor],
+    nearest_gt_idx_: list[Tensor],
+) -> tuple[Tensor, Tensor]:
     num_layers = len(gt_dnums_)
     l1_loss = nn.L1Loss(reduction="mean")
-    mean_distance_loss_ = []
-    upsample_num_loss_ = []
+    mean_distance_loss_: list[Tensor] = []
+    upsample_num_loss_: list[Tensor] = []
 
     for i in range(num_layers):
         if i == num_layers - 1:
@@ -177,20 +194,22 @@ def get_density_loss(gt_dnums_, gt_mdis_, unums_hat_, mdis_hat_, nearest_gt_idx_
     return sum(mean_distance_loss_), sum(upsample_num_loss_)
 
 
-def get_pts_num_loss(gt_xyzs_, unums_hat_):
+def get_pts_num_loss(gt_xyzs_: list[Tensor], unums_hat_: list[Tensor]) -> Tensor:
     num_layers = len(gt_xyzs_)
     b, _, _ = gt_xyzs_[0].shape
-    gt_num_points_ = [x.shape[2] for x in gt_xyzs_]
+    gt_num_points_: list[int] = [x.shape[2] for x in gt_xyzs_]
     return sum(
         torch.abs(unums_hat_[num_layers - i - 1].sum() - gt_num_points_[i] * b)
         for i in range(num_layers)
     )
 
 
-def get_normal_loss(gt_normals, pred_normals, nearest_gt_idx):
+def get_normal_loss(
+    gt_normals: Tensor, pred_normals: Tensor, nearest_gt_idx: Tensor
+) -> Tensor:
     nearest_normal = index_points(gt_normals, nearest_gt_idx)
     return F.mse_loss(pred_normals, nearest_normal)
 
 
-def get_latent_xyzs_loss(gt_latent_xyzs, latent_xyzs_hat):
+def get_latent_xyzs_loss(gt_latent_xyzs: Tensor, latent_xyzs_hat: Tensor) -> Tensor:
     return F.mse_loss(gt_latent_xyzs, latent_xyzs_hat)

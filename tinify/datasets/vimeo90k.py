@@ -27,16 +27,21 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
 from pathlib import Path
+from typing import Callable, TypeVar
 
 from PIL import Image
 from torch.utils.data import Dataset
 
 from tinify.registry import register_dataset
 
+T = TypeVar("T")
+
 
 @register_dataset("Vimeo90kDataset")
-class Vimeo90kDataset(Dataset):
+class Vimeo90kDataset(Dataset[Image.Image | T]):
     """Load a Vimeo-90K structured dataset.
 
     Vimeo-90K dataset from
@@ -64,7 +69,16 @@ class Vimeo90kDataset(Dataset):
         tuplet (int): order of dataset tuplet (e.g. 3 for "triplet" dataset)
     """
 
-    def __init__(self, root, transform=None, split="train", tuplet=3):
+    samples: list[str]
+    transform: Callable[[Image.Image], T] | None
+
+    def __init__(
+        self,
+        root: str | Path,
+        transform: Callable[[Image.Image], T] | None = None,
+        split: str = "train",
+        tuplet: int = 3,
+    ) -> None:
         list_path = Path(root) / self._list_filename(split, tuplet)
 
         with open(list_path) as f:
@@ -77,7 +91,7 @@ class Vimeo90kDataset(Dataset):
 
         self.transform = transform
 
-    def __getitem__(self, index):
+    def __getitem__(self, index: int) -> Image.Image | T:
         """
         Args:
             index (int): Index
@@ -90,7 +104,7 @@ class Vimeo90kDataset(Dataset):
             return self.transform(img)
         return img
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.samples)
 
     def _list_filename(self, split: str, tuplet: int) -> str:

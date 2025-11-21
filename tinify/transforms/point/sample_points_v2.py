@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 # Copyright (c) 2021-2025, InterDigital Communications, Inc
 # All rights reserved.
 
@@ -28,6 +30,7 @@
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import torch
+from torch import Generator
 
 from torch_geometric.data import Data
 from torch_geometric.data.datapipes import functional_transform
@@ -55,15 +58,21 @@ class SamplePointsV2(BaseTransform):
         static_seed (int, optional): Reset random seed to this every call.
     """
 
+    num: int
+    remove_faces: bool
+    include_normals: bool
+    generator: Generator
+    static_seed: int | None
+
     def __init__(
         self,
         num: int,
         *,
         remove_faces: bool = True,
         include_normals: bool = False,
-        seed=None,
-        static_seed=None,
-    ):
+        seed: int | None = None,
+        static_seed: int | None = None,
+    ) -> None:
         self.num = num
         self.remove_faces = remove_faces
         self.include_normals = include_normals

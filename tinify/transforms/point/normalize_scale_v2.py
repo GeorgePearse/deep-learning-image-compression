@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 # Copyright (c) 2021-2025, InterDigital Communications, Inc
 # All rights reserved.
 
@@ -27,7 +29,11 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from collections.abc import Callable
+from typing import Literal
+
 import torch
+from torch import Tensor
 
 from torch_geometric.data import Data
 from torch_geometric.data.datapipes import functional_transform
@@ -43,7 +49,12 @@ class NormalizeScaleV2(BaseTransform):
     (functional name: :obj:`normalize_scale_v2`).
     """
 
-    def __init__(self, *, center=True, scale_method="linf"):
+    scale_method: Literal["l2", "linf"]
+    center: Center | Callable[[Data], Data]
+
+    def __init__(
+        self, *, center: bool = True, scale_method: Literal["l2", "linf"] = "linf"
+    ) -> None:
         self.scale_method = scale_method
         self.center = Center() if center else lambda x: x
 
@@ -52,7 +63,7 @@ class NormalizeScaleV2(BaseTransform):
         data.pos = data.pos / self._compute_scale(data)
         return data
 
-    def _compute_scale(self, data: Data) -> torch.Tensor:
+    def _compute_scale(self, data: Data) -> Tensor:
         if self.scale_method == "l2":
             return (data.pos**2).sum(axis=-1).sqrt().max()
         if self.scale_method == "linf":

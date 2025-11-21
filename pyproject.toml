@@ -48,6 +48,7 @@ dependencies = [
   "torchvision>=0.17.0; python_version >= '3.9'",
   "lightning>=2.0.0",
   "tqdm",
+  "uniplot",
   "typing-extensions>=4.0.0",
   "wheel>=0.32.0", # For --no-build-isolation.
 ]
@@ -110,7 +111,10 @@ dev = [
   "flake8-comprehensions",
   "isort",
   "mypy",
+  "prek>=0.2.18",
   "ruff==0.8.6",
+  "ty>=0.0.1a27",
+  "zuban>=0.2.3",
   { include-group = "test" },
 ]
 doc = [
@@ -173,3 +177,44 @@ markers = [
     "pretrained: download and check pretrained models (slow, deselect with '-m \"not pretrained\"')",
     "slow: all slow tests (pretrained models, train, etc...)",
 ]
+
+[tool.ty.rules]
+# Ignore errors for optional dependencies that may not be installed
+unresolved-import = "ignore"
+# Ignore unresolved attribute errors (often from dynamic PyTorch module attributes)
+unresolved-attribute = "warn"
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+exclude = ["examples/", "docs/", "build/"]
+
+[[tool.mypy.overrides]]
+module = [
+    "open3d.*",
+    "pytorch3d.*",
+    "pointops.*",
+    "range_coder.*",
+    "tinify_exts.*",
+    "tinify.ans.*",
+    "ipywidgets.*",
+    "IPython.*",
+]
+ignore_missing_imports = true
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+exclude = [
+    ".git",
+    ".mypy_cache",
+    ".venv",
+    "build",
+    "dist",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4"]
+ignore = ["E501"]  # Line too long handled by formatter

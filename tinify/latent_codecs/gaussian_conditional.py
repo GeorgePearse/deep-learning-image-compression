@@ -27,10 +27,11 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from typing import Any, Dict, List, Optional, Tuple, Union
+from __future__ import annotations
+
+from typing import Any
 
 import torch.nn as nn
-
 from torch import Tensor
 
 from tinify.entropy_models import GaussianConditional
@@ -78,16 +79,18 @@ class GaussianConditionalLatentCodec(LatentCodec):
 
     gaussian_conditional: GaussianConditional
     entropy_parameters: nn.Module
+    quantizer: str
+    chunks: tuple[str, ...]
 
     def __init__(
         self,
-        scale_table: Optional[Union[List, Tuple]] = None,
-        gaussian_conditional: Optional[GaussianConditional] = None,
-        entropy_parameters: Optional[nn.Module] = None,
+        scale_table: list[float] | tuple[float, ...] | None = None,
+        gaussian_conditional: GaussianConditional | None = None,
+        entropy_parameters: nn.Module | None = None,
         quantizer: str = "noise",
-        chunks: Tuple[str, ...] = ("scales", "means"),
-        **kwargs,
-    ):
+        chunks: tuple[str, ...] = ("scales", "means"),
+        **kwargs: Any,
+    ) -> None:
         super().__init__()
         self.quantizer = quantizer
         self.gaussian_conditional = gaussian_conditional or GaussianConditional(
@@ -96,7 +99,7 @@ class GaussianConditionalLatentCodec(LatentCodec):
         self.entropy_parameters = entropy_parameters or nn.Identity()
         self.chunks = tuple(chunks)
 
-    def forward(self, y: Tensor, ctx_params: Tensor) -> Dict[str, Any]:
+    def forward(self, y: Tensor, ctx_params: Tensor) -> dict[str, Any]:
         gaussian_params = self.entropy_parameters(ctx_params)
         scales_hat, means_hat = self._chunk(gaussian_params)
         y_hat, y_likelihoods = self.gaussian_conditional(y, scales_hat, means=means_hat)
@@ -104,7 +107,7 @@ class GaussianConditionalLatentCodec(LatentCodec):
             y_hat = quantize_ste(y - means_hat) + means_hat
         return {"likelihoods": {"y": y_likelihoods}, "y_hat": y_hat}
 
-    def compress(self, y: Tensor, ctx_params: Tensor) -> Dict[str, Any]:
+    def compress(self, y: Tensor, ctx_params: Tensor) -> dict[str, Any]:
         gaussian_params = self.entropy_parameters(ctx_params)
         scales_hat, means_hat = self._chunk(gaussian_params)
         indexes = self.gaussian_conditional.build_indexes(scales_hat)
@@ -116,11 +119,11 @@ class GaussianConditionalLatentCodec(LatentCodec):
 
     def decompress(
         self,
-        strings: List[List[bytes]],
-        shape: Tuple[int, int],
+        strings: list[list[bytes]],
+        shape: tuple[int, int],
         ctx_params: Tensor,
-        **kwargs,
-    ) -> Dict[str, Any]:
+        **kwargs: Any,
+    ) -> dict[str, Any]:
         (y_strings,) = strings
         gaussian_params = self.entropy_parameters(ctx_params)
         scales_hat, means_hat = self._chunk(gaussian_params)
@@ -131,8 +134,9 @@ class GaussianConditionalLatentCodec(LatentCodec):
         assert y_hat.shape[2:4] == shape
         return {"y_hat": y_hat}
 
-    def _chunk(self, params: Tensor) -> Tuple[Tensor, Tensor]:
-        scales, means = None, None
+    def _chunk(self, params: Tensor) -> tuple[Tensor | None, Tensor | None]:
+        scales: Tensor | None = None
+        means: Tensor | None = None
         if self.chunks == ("scales",):
             scales = params
         if self.chunks == ("means",):

@@ -29,6 +29,12 @@
 
 from __future__ import annotations
 
+from typing import Any
+
+import torch.nn as nn
+
+from torch import Tensor
+
 from tinify.latent_codecs import LatentCodec
 from tinify.latent_codecs.entropy_bottleneck import EntropyBottleneckLatentCodec
 from tinify.layers.pointcloud.pointnet import (
@@ -69,19 +75,24 @@ class PointNetReconstructionPccModel(CompressionModel):
     """
 
     latent_codec: LatentCodec
+    g_a: nn.Module
+    g_s: nn.Module
 
     def __init__(
         self,
-        num_points=1024,
-        num_channels={  # noqa: B006
-            "g_a": [3, 64, 64, 64, 128, 1024],
-            "g_s": [1024, 256, 512, 1024 * 3],
-        },
-        groups={  # noqa: B006
-            "g_a": [1, 1, 1, 1, 1],
-        },
-    ):
+        num_points: int = 1024,
+        num_channels: dict[str, list[int]] | None = None,
+        groups: dict[str, list[int]] | None = None,
+    ) -> None:
         super().__init__()
+
+        if num_channels is None:
+            num_channels = {
+                "g_a": [3, 64, 64, 64, 128, 1024],
+                "g_s": [1024, 256, 512, 1024 * 3],
+            }
+        if groups is None:
+            groups = {"g_a": [1, 1, 1, 1, 1]}
 
         assert num_channels["g_a"][-1] == num_channels["g_s"][0]
         assert num_channels["g_s"][-1] == num_points * 3
@@ -95,7 +106,7 @@ class PointNetReconstructionPccModel(CompressionModel):
             tail_mass=1e-4,
         )
 
-    def forward(self, input):
+    def forward(self, input: dict[str, Tensor]) -> dict[str, Any]:
         x = input["pos"]
         x_t = x.transpose(-2, -1)
         y = self.g_a(x_t)
@@ -117,7 +128,7 @@ class PointNetReconstructionPccModel(CompressionModel):
             },
         }
 
-    def compress(self, input):
+    def compress(self, input: dict[str, Tensor]) -> dict[str, Any]:
         x = input["pos"]
         x_t = x.transpose(-2, -1)
         y = self.g_a(x_t)
@@ -125,7 +136,9 @@ class PointNetReconstructionPccModel(CompressionModel):
         [y_strings] = y_out["strings"]
         return {"strings": [y_strings], "shape": (1,)}
 
-    def decompress(self, strings, shape):
+    def decompress(
+        self, strings: list[list[bytes]], shape: tuple[int, ...]
+    ) -> dict[str, Tensor]:
         assert isinstance(strings, list) and len(strings) == 1
         [y_strings] = strings
         y_hat = self.latent_codec.decompress([y_strings], shape)

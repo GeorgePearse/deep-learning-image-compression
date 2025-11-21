@@ -27,10 +27,12 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
 import os
 import shutil
-
 from pathlib import Path
+from typing import Any, Callable
 
 from torch.utils.data import ConcatDataset
 
@@ -70,24 +72,24 @@ class S3disDataset(CacheDataset):
             <https://paperswithcode.com/dataset/s3dis>`_
     """
 
-    URLS = [
+    URLS: list[str] = [
         "https://shapenet.cs.stanford.edu/media/indoor3d_sem_seg_hdf5_data.zip",
     ]
 
-    HASHES = [
+    HASHES: list[str] = [
         "587bb63b296d542c24910c384c41028f2caa1d749042ae891d0d64968c773185",  # indoor3d_sem_seg_hdf5_data.zip
     ]
 
     # Suggested splits:
-    AREAS = {
+    AREAS: dict[str, tuple[int, ...]] = {
         "train": (1, 2, 3, 4, 6),
         "valid": (5,),
         "test": (5,),
     }
 
-    NUM_SAMPLES_PER_AREA = [0, 3687, 4440, 1650, 3662, 6852, 3294]
+    NUM_SAMPLES_PER_AREA: list[int] = [0, 3687, 4440, 1650, 3662, 6852, 3294]
 
-    LABELS = [
+    LABELS: list[str] = [
         "ceiling",
         "floor",
         "wall",
@@ -103,7 +105,7 @@ class S3disDataset(CacheDataset):
         "clutter",
     ]
 
-    ROOMS = [
+    ROOMS: list[str] = [
         "auditorium",
         "conferenceRoom",
         "copyRoom",
@@ -117,17 +119,24 @@ class S3disDataset(CacheDataset):
         "WC",
     ]
 
+    root: Path | None
+    cache_root: Path
+    split: str
+    split_name: str
+    areas: tuple[int, ...]
+    _root_dataset: ConcatDataset[dict[str, Any]]
+
     def __init__(
         self,
-        root=None,
-        cache_root=None,
-        split="train",
-        split_name=None,
-        areas=AREAS["train"],
-        pre_transform=None,
-        transform=None,
-        download=True,
-    ):
+        root: str | Path | None = None,
+        cache_root: str | Path | None = None,
+        split: str = "train",
+        split_name: str | None = None,
+        areas: tuple[int, ...] = AREAS["train"],
+        pre_transform: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        transform: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        download: bool = True,
+    ) -> None:
         if cache_root is None:
             assert root is not None
             cache_root = f"{str(root).rstrip('/')}_cache"
@@ -151,7 +160,7 @@ class S3disDataset(CacheDataset):
 
         self._ensure_cache()
 
-    def download(self, force=False):
+    def download(self, force: bool = False) -> None:
         if not force and self.root.exists():
             return
         tmpdir = self.root.parent / "tmp"
@@ -164,7 +173,7 @@ class S3disDataset(CacheDataset):
             assert expected_hash == hash_file(filepath, method="sha256")
         shutil.move(tmpdir / "indoor3d_sem_seg_hdf5_data", self.root)
 
-    def _get_root_dataset(self):
+    def _get_root_dataset(self) -> ConcatDataset[dict[str, Any]]:
         import h5py
 
         h5_files = [h5py.File(path, "r") for path in sorted(self.root.glob("**/*.h5"))]
@@ -175,7 +184,7 @@ class S3disDataset(CacheDataset):
             for h5_file in h5_files
         )
 
-    def _get_items(self):
+    def _get_items(self) -> list[tuple[int, str]]:
         with open(self.root / "room_filelist.txt") as f:
             lines = f.read().splitlines()
         return [
@@ -184,7 +193,7 @@ class S3disDataset(CacheDataset):
             if int(line.split("_")[1]) in self.areas
         ]
 
-    def _load_item(self, item):
+    def _load_item(self, item: tuple[int, str]) -> dict[str, Any]:
         index, name = item
         _, area_index_str, room_str, *_ = name.split("_")
         data = self._root_dataset[index]

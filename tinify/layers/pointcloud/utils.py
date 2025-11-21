@@ -27,9 +27,12 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
 from math import ceil
 
 import torch
+from torch import Tensor
 
 try:
     from pointops.functions import pointops
@@ -37,7 +40,7 @@ except ImportError:
     pass  # NOTE: Optional dependency.
 
 
-def index_points(xyzs, idx):
+def index_points(xyzs: Tensor, idx: Tensor) -> Tensor:
     """Index points.
 
     Args:
@@ -55,12 +58,12 @@ def index_points(xyzs, idx):
 
 
 def select_xyzs_and_feats(
-    candidate_xyzs,
-    candidate_feats,
-    upsample_num,
-    upsample_rate=None,
-    method="batch_loop",
-):
+    candidate_xyzs: Tensor,
+    candidate_feats: Tensor,
+    upsample_num: Tensor,
+    upsample_rate: float | None = None,
+    method: str = "batch_loop",
+) -> tuple[Tensor, Tensor]:
     """Selects subset of points to match predicted local point cloud densities.
 
     Args:
@@ -145,7 +148,9 @@ def select_xyzs_and_feats(
     return xyzs, feats
 
 
-def _select_xyzs_and_feats_single(candidate_xyzs, candidate_feats, upsample_num):
+def _select_xyzs_and_feats_single(
+    candidate_xyzs: Tensor, candidate_feats: Tensor, upsample_num: Tensor
+) -> tuple[Tensor, Tensor]:
     # candidate_xyzs: (b, 3, n, max_upsample_num)
     # candidate_feats: (b, c, n, max_upsample_num)
     # upsample_num: (b, n)
@@ -173,7 +178,9 @@ def _select_xyzs_and_feats_single(candidate_xyzs, candidate_feats, upsample_num)
     return xyzs, feats
 
 
-def resample_points(xyzs, feats, num_points):
+def resample_points(
+    xyzs: Tensor, feats: Tensor, num_points: int
+) -> tuple[Tensor, Tensor]:
     """Resample points to a target number.
 
     Args:
@@ -217,7 +224,9 @@ def resample_points(xyzs, feats, num_points):
     return new_xyzs, new_feats
 
 
-def randperm(shape, device=None, dim=-1):
+def randperm(
+    shape: tuple[int, ...], device: torch.device | None = None, dim: int = -1
+) -> Tensor:
     """Random permutation, like `torch.randperm`, but with a shape."""
     if dim != -1:
         raise NotImplementedError
@@ -225,7 +234,7 @@ def randperm(shape, device=None, dim=-1):
     return idx
 
 
-def cycle_after(x, end):
+def cycle_after(x: Tensor, end: Tensor) -> tuple[Tensor, Tensor, Tensor]:
     """Cycle tensor after a given index.
 
     Example:

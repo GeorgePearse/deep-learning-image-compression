@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 # Copyright (c) 2021-2025, InterDigital Communications, Inc
 # All rights reserved.
 
@@ -28,6 +30,7 @@
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import torch
+from torch import Generator
 
 from torch_geometric.data import Data
 from torch_geometric.data.datapipes import functional_transform
@@ -43,16 +46,23 @@ class RandomSample(BaseTransform):
     (functional name: :obj:`random_sample`).
     """
 
+    num: int | None
+    attrs: tuple[str, ...]
+    remove_duplicates_by: str | None
+    preserve_order: bool
+    generator: Generator
+    static_seed: int | None
+
     def __init__(
         self,
-        num=None,
+        num: int | None = None,
         *,
-        attrs=("pos",),
-        remove_duplicates_by=None,
-        preserve_order=False,
-        seed=None,
-        static_seed=None,
-    ):
+        attrs: tuple[str, ...] = ("pos",),
+        remove_duplicates_by: str | None = None,
+        preserve_order: bool = False,
+        seed: int | None = None,
+        static_seed: int | None = None,
+    ) -> None:
         self.num = num
         self.attrs = attrs
         self.remove_duplicates_by = remove_duplicates_by

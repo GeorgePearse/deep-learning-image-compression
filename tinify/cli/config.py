@@ -9,7 +9,8 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from argparse import Namespace
+from typing import Any
 
 import tomli
 
@@ -21,10 +22,10 @@ class OptimizerConfig:
     type: str = "Adam"
     lr: float = 1e-4
     weight_decay: float = 0.0
-    betas: tuple = (0.9, 0.999)
+    betas: tuple[float, float] = (0.9, 0.999)
 
     @classmethod
-    def from_dict(cls, d: Dict[str, Any]) -> "OptimizerConfig":
+    def from_dict(cls, d: dict[str, Any]) -> "OptimizerConfig":
         return cls(**{k: v for k, v in d.items() if k in cls.__dataclass_fields__})
 
 
@@ -39,7 +40,7 @@ class SchedulerConfig:
     min_lr: float = 1e-7
 
     @classmethod
-    def from_dict(cls, d: Dict[str, Any]) -> "SchedulerConfig":
+    def from_dict(cls, d: dict[str, Any]) -> "SchedulerConfig":
         return cls(**{k: v for k, v in d.items() if k in cls.__dataclass_fields__})
 
 
@@ -50,12 +51,14 @@ class ModelConfig:
     name: str = "mbt2018-mean"
     quality: int = 3
     pretrained: bool = False
-    kwargs: Dict[str, Any] = field(default_factory=dict)
+    kwargs: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def from_dict(cls, d: Dict[str, Any]) -> "ModelConfig":
+    def from_dict(cls, d: dict[str, Any]) -> "ModelConfig":
         kwargs = {k: v for k, v in d.items() if k not in cls.__dataclass_fields__}
-        base = {k: v for k, v in d.items() if k in cls.__dataclass_fields__}
+        base: dict[str, Any] = {
+            k: v for k, v in d.items() if k in cls.__dataclass_fields__
+        }
         base["kwargs"] = {**base.get("kwargs", {}), **kwargs}
         return cls(**base)
 
@@ -67,11 +70,11 @@ class DatasetConfig:
     path: str = ""
     split_train: str = "train"
     split_test: str = "test"
-    patch_size: List[int] = field(default_factory=lambda: [256, 256])
+    patch_size: list[int] = field(default_factory=lambda: [256, 256])
     num_workers: int = 4
 
     @classmethod
-    def from_dict(cls, d: Dict[str, Any]) -> "DatasetConfig":
+    def from_dict(cls, d: dict[str, Any]) -> "DatasetConfig":
         return cls(**{k: v for k, v in d.items() if k in cls.__dataclass_fields__})
 
 
@@ -85,15 +88,15 @@ class TrainingConfig:
     lmbda: float = 0.01
     metric: str = "mse"  # mse or ms-ssim
     clip_max_norm: float = 1.0
-    seed: Optional[int] = None
+    seed: int | None = None
     cuda: bool = True
     save: bool = True
     save_dir: str = "./checkpoints"
-    checkpoint: Optional[str] = None
+    checkpoint: str | None = None
     log_interval: int = 10
 
     @classmethod
-    def from_dict(cls, d: Dict[str, Any]) -> "TrainingConfig":
+    def from_dict(cls, d: dict[str, Any]) -> "TrainingConfig":
         return cls(**{k: v for k, v in d.items() if k in cls.__dataclass_fields__})
 
 
@@ -112,7 +115,7 @@ class Config:
     scheduler: SchedulerConfig = field(default_factory=SchedulerConfig)
 
     @classmethod
-    def from_dict(cls, d: Dict[str, Any]) -> "Config":
+    def from_dict(cls, d: dict[str, Any]) -> "Config":
         """Create config from dictionary."""
         config = cls()
 
@@ -141,7 +144,7 @@ class Config:
         return config
 
     @classmethod
-    def from_file(cls, path: Union[str, Path]) -> "Config":
+    def from_file(cls, path: str | Path) -> "Config":
         """Load configuration from YAML, JSON, or TOML file."""
         path = Path(path)
 
@@ -154,9 +157,12 @@ class Config:
         if suffix in (".yaml", ".yml"):
             try:
                 import yaml
+
                 data = yaml.safe_load(content)
             except ImportError:
-                raise ImportError("PyYAML is required for YAML config files: pip install pyyaml")
+                raise ImportError(
+                    "PyYAML is required for YAML config files: pip install pyyaml"
+                )
         elif suffix == ".json":
             data = json.loads(content)
         elif suffix == ".toml":
@@ -166,7 +172,7 @@ class Config:
 
         return cls.from_dict(data)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert config to dictionary."""
         return {
             "domain": self.domain,
@@ -214,7 +220,7 @@ class Config:
             },
         }
 
-    def merge_cli_args(self, args) -> "Config":
+    def merge_cli_args(self, args: Namespace) -> "Config":
         """Merge CLI arguments into config (CLI takes precedence)."""
         if hasattr(args, "model") and args.model:
             self.model.name = args.model
@@ -222,6 +228,8 @@ class Config:
             self.model.quality = args.quality
         if hasattr(args, "dataset") and args.dataset:
             self.dataset.path = args.dataset
+        if hasattr(args, "patch_size") and args.patch_size is not None:
+            self.dataset.patch_size = args.patch_size
         if hasattr(args, "epochs") and args.epochs is not None:
             self.training.epochs = args.epochs
         if hasattr(args, "batch_size") and args.batch_size is not None:

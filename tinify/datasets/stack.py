@@ -30,14 +30,15 @@
 # Copied from https://github.com/pytorch/pytorch/blob/v2.1.0/torch/utils/data/dataset.py
 # BSD-style license: https://github.com/pytorch/pytorch/blob/v2.1.0/LICENSE
 
-from typing import Dict, Tuple, TypeVar, Union
+from __future__ import annotations
+
+from typing import TypeVar
 
 from torch.utils.data import Dataset
 
 T_co = TypeVar("T_co", covariant=True)
-T = TypeVar("T")
-T_dict = Dict[str, T_co]
-T_tuple = Tuple[T_co, ...]
+T_dict = dict[str, T_co]
+T_tuple = tuple[T_co, ...]
 T_stack = TypeVar("T_stack", T_tuple, T_dict)
 
 
@@ -60,7 +61,8 @@ class StackDataset(Dataset[T_stack]):
         **kwargs (Dataset): Datasets for stacking returned as dict.
     """
 
-    datasets: Union[tuple, dict]
+    datasets: tuple[Dataset[T_co], ...] | dict[str, Dataset[T_co]]
+    _length: int
 
     def __init__(self, *args: Dataset[T_co], **kwargs: Dataset[T_co]) -> None:
         if args:
@@ -82,10 +84,10 @@ class StackDataset(Dataset[T_stack]):
         else:
             raise ValueError("At least one dataset should be passed")
 
-    def __getitem__(self, index):
+    def __getitem__(self, index: int) -> dict[str, T_co] | tuple[T_co, ...]:
         if isinstance(self.datasets, dict):
             return {k: dataset[index] for k, dataset in self.datasets.items()}
         return tuple(dataset[index] for dataset in self.datasets)
 
-    def __len__(self):
+    def __len__(self) -> int:
         return self._length

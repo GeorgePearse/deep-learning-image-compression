@@ -27,6 +27,8 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -51,13 +53,19 @@ class GDN(nn.Module):
 
     """
 
+    inverse: bool
+    beta_reparam: NonNegativeParametrizer
+    beta: nn.Parameter
+    gamma_reparam: NonNegativeParametrizer
+    gamma: nn.Parameter
+
     def __init__(
         self,
         in_channels: int,
         inverse: bool = False,
         beta_min: float = 1e-6,
         gamma_init: float = 0.1,
-    ):
+    ) -> None:
         super().__init__()
 
         beta_min = float(beta_min)

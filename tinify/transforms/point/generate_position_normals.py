@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 # Copyright (c) 2021-2025, InterDigital Communications, Inc
 # All rights reserved.
 
@@ -28,6 +30,7 @@
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 from contextlib import suppress
+from typing import Any, Literal
 
 import torch
 
@@ -45,7 +48,12 @@ class GeneratePositionNormals(BaseTransform):
     (functional name: :obj:`generate_position_normals`).
     """
 
-    def __init__(self, *, method="any", **kwargs):
+    method: Literal["open3d", "pytorch3d", "any"]
+    kwargs: dict[str, Any]
+
+    def __init__(
+        self, *, method: Literal["open3d", "pytorch3d", "any"] = "any", **kwargs: Any
+    ) -> None:
         self.method = method
         self.kwargs = kwargs
 

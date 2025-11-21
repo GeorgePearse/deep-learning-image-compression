@@ -27,20 +27,21 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
 import argparse
 import sys
-
 from os.path import exists
 
 import numpy as np
 import torch
 
-max_val_abs = 32767
-max_proba = 65536
-min_cdf_bound = 2
+max_val_abs: int = 32767
+max_proba: int = 65536
+min_cdf_bound: int = 2
 
 
-def parse_args(argv):
+def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="extract latent from dataset")
     parser.add_argument("--model", type=str, required=True, help="model pth")
     parser.add_argument("--input", type=str, required=True, help="npy batch")
@@ -60,7 +61,7 @@ def parse_args(argv):
     return args
 
 
-def main(argv):  # noqa: C901
+def main(argv: list[str]) -> None:  # noqa: C901
     args = parse_args(argv)
 
     print("[INFO] read checkpoint: ", args.model)

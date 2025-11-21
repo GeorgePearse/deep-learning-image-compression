@@ -27,11 +27,13 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from typing import Any, Dict, List, Mapping, Tuple
+from __future__ import annotations
+
+from collections.abc import Mapping
+from typing import Any, Literal
 
 import torch
 import torch.nn as nn
-
 from torch import Tensor
 
 from tinify.entropy_models import EntropyModel
@@ -108,19 +110,28 @@ class CheckerboardLatentCodec(LatentCodec):
         □   empty
     """
 
+    latent_codec: Mapping[str, LatentCodec]
+    entropy_parameters: nn.Module
+    context_prediction: CheckerboardMaskedConv2d
+    y: LatentCodec
+    anchor_parity: Literal["even", "odd"]
+    non_anchor_parity: Literal["even", "odd"]
+    forward_method: str
+    _kwargs: dict[str, Any]
+
     def __init__(
         self,
         latent_codec: Mapping[str, LatentCodec],
         entropy_parameters: nn.Module,
         context_prediction: CheckerboardMaskedConv2d,
-        anchor_parity="even",
-        forward_method="twopass",
-        **kwargs,
-    ):
+        anchor_parity: Literal["even", "odd"] = "even",
+        forward_method: str = "twopass",
+        **kwargs: Any,
+    ) -> None:
         super().__init__()
         self._kwargs = kwargs
         self.anchor_parity = anchor_parity
-        self.non_anchor_parity = {"odd": "even", "even": "odd"}[anchor_parity]
+        self.non_anchor_parity = {"odd": "even", "even": "odd"}[anchor_parity]  # type: ignore[assignment]
         self.forward_method = forward_method
         self.entropy_parameters = entropy_parameters
         self.context_prediction = context_prediction
@@ -130,7 +141,7 @@ class CheckerboardLatentCodec(LatentCodec):
     def __getitem__(self, key: str) -> LatentCodec:
         return self.latent_codec[key]
 
-    def forward(self, y: Tensor, side_params: Tensor) -> Dict[str, Any]:
+    def forward(self, y: Tensor, side_params: Tensor) -> dict[str, Any]:
         if self.forward_method == "onepass":
             return self._forward_onepass(y, side_params)
         if self.forward_method == "twopass":
@@ -139,7 +150,7 @@ class CheckerboardLatentCodec(LatentCodec):
             return self._forward_twopass_faster(y, side_params)
         raise ValueError(f"Unknown forward method: {self.forward_method}")
 
-    def _forward_onepass(self, y: Tensor, side_params: Tensor) -> Dict[str, Any]:
+    def _forward_onepass(self, y: Tensor, side_params: Tensor) -> dict[str, Any]:
         """Fast estimation with single pass of the entropy parameters network.
 
         It is faster than the twopass method (only one pass required!),
@@ -158,7 +169,7 @@ class CheckerboardLatentCodec(LatentCodec):
             "y_hat": y_hat,
         }
 
-    def _forward_twopass(self, y: Tensor, side_params: Tensor) -> Dict[str, Any]:
+    def _forward_twopass(self, y: Tensor, side_params: Tensor) -> dict[str, Any]:
         """Runs the entropy parameters network in two passes.
 
         The first pass gets ``y_hat`` and ``means_hat`` for the anchors.
@@ -176,7 +187,7 @@ class CheckerboardLatentCodec(LatentCodec):
 
         params = y.new_zeros((B, C * 2, H, W))
 
-        y_hat_ = []
+        y_hat_: list[Tensor] = []
 
         # NOTE: The _i variables contain only the current step's pixels.
         # i=0: step=anchor
@@ -216,7 +227,7 @@ class CheckerboardLatentCodec(LatentCodec):
             "y_hat": y_hat,
         }
 
-    def _forward_twopass_faster(self, y: Tensor, side_params: Tensor) -> Dict[str, Any]:
+    def _forward_twopass_faster(self, y: Tensor, side_params: Tensor) -> dict[str, Any]:
         """Runs the entropy parameters network in two passes.
 
         This version was written based on the paper description.
@@ -253,12 +264,12 @@ class CheckerboardLatentCodec(LatentCodec):
         """Create a zero tensor with correct shape for y_ctx."""
         return self._mask_all(self.context_prediction(y).detach())
 
-    def compress(self, y: Tensor, side_params: Tensor) -> Dict[str, Any]:
+    def compress(self, y: Tensor, side_params: Tensor) -> dict[str, Any]:
         n, c, h, w = y.shape
         y_hat_ = side_params.new_zeros((2, n, c, h, w // 2))
         side_params_ = self.unembed(side_params)
         y_ = self.unembed(y)
-        y_strings_ = [None] * 2
+        y_strings_: list[list[bytes] | None] = [None] * 2
 
         for i in range(2):
             y_ctx_i = self.unembed(self.context_prediction(self.embed(y_hat_)))[i]
@@ -279,11 +290,11 @@ class CheckerboardLatentCodec(LatentCodec):
 
     def decompress(
         self,
-        strings: List[List[bytes]],
-        shape: Tuple[int, ...],
+        strings: list[list[bytes]],
+        shape: tuple[int, ...],
         side_params: Tensor,
-        **kwargs,
-    ) -> Dict[str, Any]:
+        **kwargs: Any,
+    ) -> dict[str, Any]:
         y_strings_ = strings
         n = len(y_strings_[0])
         assert len(y_strings_) == 2
@@ -357,9 +368,10 @@ class CheckerboardLatentCodec(LatentCodec):
             y[..., 1::2, 1::2] = y_[1, ..., 1::2, :]
         return y
 
-    def _copy(self, dest: Tensor, src: Tensor, step: str) -> None:
+    def _copy(
+        self, dest: Tensor, src: Tensor, step: Literal["anchor", "non_anchor"]
+    ) -> None:
         """Copy pixels in the current step."""
-        assert step in ("anchor", "non_anchor")
         parity = self.anchor_parity if step == "anchor" else self.non_anchor_parity
         if parity == "even":
             dest[..., 0::2, 0::2] = src[..., 0::2, 0::2]
@@ -368,7 +380,7 @@ class CheckerboardLatentCodec(LatentCodec):
             dest[..., 0::2, 1::2] = src[..., 0::2, 1::2]
             dest[..., 1::2, 0::2] = src[..., 1::2, 0::2]
 
-    def _keep_only(self, y: Tensor, step: str) -> Tensor:
+    def _keep_only(self, y: Tensor, step: Literal["anchor", "non_anchor"]) -> Tensor:
         """Keep only pixels in the current step, and zero out the rest."""
         y = y.clone()
         parity = self.anchor_parity if step == "anchor" else self.non_anchor_parity
@@ -385,10 +397,10 @@ class CheckerboardLatentCodec(LatentCodec):
         y[:] = 0
         return y
 
-    def merge(self, *args):
+    def merge(self, *args: Tensor) -> Tensor:
         return torch.cat(args, dim=1)
 
     def quantize(self, y: Tensor) -> Tensor:
         mode = "noise" if self.training else "dequantize"
-        y_hat = EntropyModel.quantize(None, y, mode)
+        y_hat = EntropyModel.quantize(None, y, mode)  # type: ignore[arg-type]
         return y_hat

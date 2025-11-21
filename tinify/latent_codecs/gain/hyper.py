@@ -27,10 +27,11 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from typing import Any, Dict, List, Tuple
+from __future__ import annotations
+
+from typing import Any
 
 import torch.nn as nn
-
 from torch import Tensor
 
 from tinify.entropy_models import EntropyBottleneck
@@ -66,19 +67,23 @@ class GainHyperLatentCodec(LatentCodec):
 
     """
 
+    entropy_bottleneck: EntropyBottleneck
+    h_a: nn.Module
+    h_s: nn.Module
+
     def __init__(
         self,
         entropy_bottleneck: EntropyBottleneck,
         h_a: nn.Module,
         h_s: nn.Module,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         super().__init__()
         self.entropy_bottleneck = entropy_bottleneck
         self.h_a = h_a
         self.h_s = h_s
 
-    def forward(self, y: Tensor, gain: Tensor, gain_inv: Tensor) -> Dict[str, Any]:
+    def forward(self, y: Tensor, gain: Tensor, gain_inv: Tensor) -> dict[str, Any]:
         z = self.h_a(y)
         z = z * gain
         z_hat, z_likelihoods = self.entropy_bottleneck(z)
@@ -86,7 +91,7 @@ class GainHyperLatentCodec(LatentCodec):
         params = self.h_s(z_hat)
         return {"likelihoods": {"z": z_likelihoods}, "params": params}
 
-    def compress(self, y: Tensor, gain: Tensor, gain_inv: Tensor) -> Dict[str, Any]:
+    def compress(self, y: Tensor, gain: Tensor, gain_inv: Tensor) -> dict[str, Any]:
         z = self.h_a(y)
         z = z * gain
         shape = z.size()[-2:]
@@ -98,11 +103,11 @@ class GainHyperLatentCodec(LatentCodec):
 
     def decompress(
         self,
-        strings: List[List[bytes]],
-        shape: Tuple[int, int],
+        strings: list[list[bytes]],
+        shape: tuple[int, int],
         gain_inv: Tensor,
-        **kwargs,
-    ) -> Dict[str, Any]:
+        **kwargs: Any,
+    ) -> dict[str, Any]:
         (z_strings,) = strings
         z_hat = self.entropy_bottleneck.decompress(z_strings, shape)
         z_hat = z_hat * gain_inv

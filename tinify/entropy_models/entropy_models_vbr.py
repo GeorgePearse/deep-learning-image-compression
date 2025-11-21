@@ -27,15 +27,15 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import warnings
+from __future__ import annotations
 
-from typing import Any, Callable, List, Optional, Tuple
+import warnings
+from typing import Any, Callable
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
 from torch import Tensor
 
 from tinify.ops import LowerBound
@@ -58,12 +58,20 @@ class EntropyModelVbr(nn.Module):
         entropy_coder_precision (int): set the entropy coder precision
     """
 
+    entropy_coder: _EntropyCoder
+    entropy_coder_precision: int
+    use_likelihood_bound: bool
+    likelihood_lower_bound: LowerBound
+    _offset: Tensor
+    _quantized_cdf: Tensor
+    _cdf_length: Tensor
+
     def __init__(
         self,
         likelihood_bound: float = 1e-9,
-        entropy_coder: Optional[str] = None,
+        entropy_coder: str | None = None,
         entropy_coder_precision: int = 16,
-    ):
+    ) -> None:
         super().__init__()
 
         if entropy_coder is None:
@@ -80,32 +88,32 @@ class EntropyModelVbr(nn.Module):
         self.register_buffer("_quantized_cdf", torch.IntTensor())
         self.register_buffer("_cdf_length", torch.IntTensor())
 
-    def __getstate__(self):
+    def __getstate__(self) -> dict[str, Any]:
         attributes = self.__dict__.copy()
         attributes["entropy_coder"] = self.entropy_coder.name
         return attributes
 
-    def __setstate__(self, state):
+    def __setstate__(self, state: dict[str, Any]) -> None:
         self.__dict__ = state
         self.entropy_coder = _EntropyCoder(self.__dict__.pop("entropy_coder"))
 
     @property
-    def offset(self):
+    def offset(self) -> Tensor:
         return self._offset
 
     @property
-    def quantized_cdf(self):
+    def quantized_cdf(self) -> Tensor:
         return self._quantized_cdf
 
     @property
-    def cdf_length(self):
+    def cdf_length(self) -> Tensor:
         return self._cdf_length
 
     # See: https://github.com/python/mypy/issues/8795
     forward: Callable[..., Any] = _forward
 
     def quantize(
-        self, inputs: Tensor, mode: str, means: Optional[Tensor] = None
+        self, inputs: Tensor, mode: str, means: Tensor | None = None
     ) -> Tensor:
         if mode not in ("noise", "dequantize", "symbols"):
             raise ValueError(f'Invalid quantization mode: "{mode}"')
@@ -135,8 +143,8 @@ class EntropyModelVbr(nn.Module):
         self,
         inputs: Tensor,
         mode: str,
-        means: Optional[Tensor] = None,
-        qs: Optional[Tensor] = None,
+        means: Tensor | None = None,
+        qs: Tensor | None = None,
     ) -> Tensor:
         if mode not in ("noise", "ste", "dequantize", "symbols"):
             raise ValueError(f'Invalid quantization mode: "{mode}"')
@@ -186,14 +194,14 @@ class EntropyModelVbr(nn.Module):
         return outputs
 
     def _quantize(
-        self, inputs: Tensor, mode: str, means: Optional[Tensor] = None
+        self, inputs: Tensor, mode: str, means: Tensor | None = None
     ) -> Tensor:
         warnings.warn("_quantize is deprecated. Use quantize instead.", stacklevel=2)
         return self.quantize(inputs, mode, means)
 
     @staticmethod
     def dequantize(
-        inputs: Tensor, means: Optional[Tensor] = None, dtype: torch.dtype = torch.float
+        inputs: Tensor, means: Tensor | None = None, dtype: torch.dtype = torch.float
     ) -> Tensor:
         if means is not None:
             outputs = inputs.type_as(means)
@@ -205,9 +213,9 @@ class EntropyModelVbr(nn.Module):
     @staticmethod
     def dequantize_variable(
         inputs: Tensor,
-        means: Optional[Tensor] = None,
+        means: Tensor | None = None,
         dtype: torch.dtype = torch.float,
-        qs: Optional[Tensor] = None,
+        qs: Tensor | None = None,
     ) -> Tensor:
         if means is not None:
             outputs = inputs.type_as(means)
@@ -223,11 +231,13 @@ class EntropyModelVbr(nn.Module):
         return outputs
 
     @classmethod
-    def _dequantize(cls, inputs: Tensor, means: Optional[Tensor] = None) -> Tensor:
+    def _dequantize(cls, inputs: Tensor, means: Tensor | None = None) -> Tensor:
         warnings.warn("_dequantize. Use dequantize instead.", stacklevel=2)
         return cls.dequantize(inputs, means)
 
-    def _pmf_to_cdf(self, pmf, tail_mass, pmf_length, max_length):
+    def _pmf_to_cdf(
+        self, pmf: Tensor, tail_mass: Tensor, pmf_length: Tensor, max_length: int
+    ) -> Tensor:
         cdf = torch.zeros(
             (len(pmf_length), max_length + 2), dtype=torch.int32, device=pmf.device
         )
@@ -237,21 +247,21 @@ class EntropyModelVbr(nn.Module):
             cdf[i, : _cdf.size(0)] = _cdf
         return cdf
 
-    def _check_cdf_size(self):
+    def _check_cdf_size(self) -> None:
         if self._quantized_cdf.numel() == 0:
             raise ValueError("Uninitialized CDFs. Run update() first")
 
         if len(self._quantized_cdf.size()) != 2:
             raise ValueError(f"Invalid CDF size {self._quantized_cdf.size()}")
 
-    def _check_offsets_size(self):
+    def _check_offsets_size(self) -> None:
         if self._offset.numel() == 0:
             raise ValueError("Uninitialized offsets. Run update() first")
 
         if len(self._offset.size()) != 1:
             raise ValueError(f"Invalid offsets size {self._offset.size()}")
 
-    def _check_cdf_length(self):
+    def _check_cdf_length(self) -> None:
         if self._cdf_length.numel() == 0:
             raise ValueError("Uninitialized CDF lengths. Run update() first")
 
@@ -260,11 +270,11 @@ class EntropyModelVbr(nn.Module):
 
     def compress(
         self,
-        inputs: torch.Tensor,
-        indexes: torch.Tensor,
-        means: Optional[torch.Tensor] = None,
-        qs: Optional[torch.Tensor] = None,
-    ):
+        inputs: Tensor,
+        indexes: Tensor,
+        means: Tensor | None = None,
+        qs: Tensor | None = None,
+    ) -> list[bytes]:
         """
         Compress input tensors to char strings.
 
@@ -291,7 +301,7 @@ class EntropyModelVbr(nn.Module):
         self._check_cdf_length()
         self._check_offsets_size()
 
-        strings = []
+        strings: list[bytes] = []
         for i in range(symbols.size(0)):
             rv = self.entropy_coder.encode_with_indexes(
                 symbols[i].reshape(-1).int().tolist(),
@@ -305,12 +315,12 @@ class EntropyModelVbr(nn.Module):
 
     def decompress(
         self,
-        strings: List[bytes],
-        indexes: torch.Tensor,
+        strings: list[bytes],
+        indexes: Tensor,
         dtype: torch.dtype = torch.float,
-        means: Optional[torch.Tensor] = None,
-        qs: Optional[torch.Tensor] = None,
-    ):
+        means: Tensor | None = None,
+        qs: Tensor | None = None,
+    ) -> Tensor:
         """
         Decompress char strings to tensors.
 
@@ -367,7 +377,7 @@ class EntropyModelVbr(nn.Module):
 
 
 class EntropyBottleneckVbr(EntropyModelVbr):
-    r"""Entropy bottleneck layer, introduced by J. Ballé, D. Minnen, S. Singh,
+    r"""Entropy bottleneck layer, introduced by J. Balle, D. Minnen, S. Singh,
     S. J. Hwang, N. Johnston, in `"Variational image compression with a scale
     hyperprior" <https://arxiv.org/abs/1802.01436>`_.
 
@@ -379,6 +389,12 @@ class EntropyBottleneckVbr(EntropyModelVbr):
     """
 
     _offset: Tensor
+    channels: int
+    filters: tuple[int, ...]
+    init_scale: float
+    tail_mass: float
+    quantiles: nn.Parameter
+    target: Tensor
 
     def __init__(
         self,
@@ -386,9 +402,9 @@ class EntropyBottleneckVbr(EntropyModelVbr):
         *args: Any,
         tail_mass: float = 1e-9,
         init_scale: float = 10,
-        filters: Tuple[int, ...] = (3, 3, 3, 3),
+        filters: tuple[int, ...] = (3, 3, 3, 3),
         **kwargs: Any,
-    ):
+    ) -> None:
         super().__init__(*args, **kwargs)
 
         self.channels = int(channels)
@@ -463,7 +479,7 @@ class EntropyBottleneckVbr(EntropyModelVbr):
         self._cdf_length = pmf_length + 2
         return True
 
-    def update_variable(self, force: bool = False, qs=1.0) -> bool:
+    def update_variable(self, force: bool = False, qs: float = 1.0) -> bool:
         # Check if we need to update the bottleneck parameters, the offsets are
         # only computed and stored when the conditonal model is update()'d.
         if self._offset.numel() > 0 and not force:
@@ -530,7 +546,7 @@ class EntropyBottleneckVbr(EntropyModelVbr):
     @torch.jit.unused
     def _likelihood(
         self, inputs: Tensor, stop_gradient: bool = False
-    ) -> Tuple[Tensor, Tensor, Tensor]:
+    ) -> tuple[Tensor, Tensor, Tensor]:
         half = float(0.5)
         lower = self._logits_cumulative(inputs - half, stop_gradient=stop_gradient)
         upper = self._logits_cumulative(inputs + half, stop_gradient=stop_gradient)
@@ -539,8 +555,11 @@ class EntropyBottleneckVbr(EntropyModelVbr):
 
     @torch.jit.unused
     def _likelihood_variable(
-        self, inputs: Tensor, stop_gradient: bool = False, qs: Optional[Tensor] = None
-    ) -> Tuple[Tensor, Tensor, Tensor]:
+        self,
+        inputs: Tensor,
+        stop_gradient: bool = False,
+        qs: float | Tensor | None = None,
+    ) -> tuple[Tensor, Tensor, Tensor]:
         half = float(0.5)
         if qs is None:
             v0 = inputs - half
@@ -556,10 +575,10 @@ class EntropyBottleneckVbr(EntropyModelVbr):
     def forward(
         self,
         x: Tensor,
-        training: Optional[bool] = None,
-        qs: Optional[Tensor] = None,
-        ste: Optional[bool] = False,
-    ) -> Tuple[Tensor, Tensor]:
+        training: bool | None = None,
+        qs: Tensor | None = None,
+        ste: bool = False,
+    ) -> tuple[Tensor, Tensor]:
         if training is None:
             training = self.training
 
@@ -602,9 +621,9 @@ class EntropyBottleneckVbr(EntropyModelVbr):
                 likelihood, _, _ = self._likelihood(outputs)
             else:
                 if ste and training:  # in this case, use also output with noise
-                    likelihood, _, _ = self._likelihood_variable(outputs, qs)
+                    likelihood, _, _ = self._likelihood_variable(outputs, qs=qs)
                 else:  # noise case, i.e. output already obtained by adding noise or it is not training
-                    likelihood, _, _ = self._likelihood_variable(outputs, qs)
+                    likelihood, _, _ = self._likelihood_variable(outputs, qs=qs)
             if self.use_likelihood_bound:
                 likelihood = self.likelihood_lower_bound(likelihood)
         else:
@@ -622,7 +641,7 @@ class EntropyBottleneckVbr(EntropyModelVbr):
         return outputs, likelihood
 
     @staticmethod
-    def _build_indexes(size):
+    def _build_indexes(size: torch.Size) -> Tensor:
         dims = len(size)
         N = size[0]
         C = size[1]
@@ -635,10 +654,10 @@ class EntropyBottleneckVbr(EntropyModelVbr):
         return indexes.repeat(N, 1, *size[2:])
 
     @staticmethod
-    def _extend_ndims(tensor, n):
+    def _extend_ndims(tensor: Tensor, n: int) -> Tensor:
         return tensor.reshape(-1, *([1] * n)) if n > 0 else tensor.reshape(-1)
 
-    def compress(self, x, qs=None):
+    def compress(self, x: Tensor, qs: Tensor | None = None) -> list[bytes]:
         indexes = self._build_indexes(x.size())
         medians = self._get_medians().detach()
         spatial_dims = len(x.size()) - 2
@@ -646,7 +665,9 @@ class EntropyBottleneckVbr(EntropyModelVbr):
         medians = medians.expand(x.size(0), *([-1] * (spatial_dims + 1)))
         return super().compress(x, indexes, medians, qs)
 
-    def decompress(self, strings, size, qs=None):
+    def decompress(
+        self, strings: list[bytes], size: tuple[int, ...], qs: Tensor | None = None
+    ) -> Tensor:
         output_size = (len(strings), self._quantized_cdf.size(0), *size)
         indexes = self._build_indexes(output_size).to(self._quantized_cdf.device)
         medians = self._extend_ndims(self._get_medians().detach(), len(size))

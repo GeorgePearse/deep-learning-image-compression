@@ -27,12 +27,13 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from typing import Any, Callable, Dict, List, Tuple, TypeVar
+from __future__ import annotations
+
+from typing import Any, Callable, TypeVar
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
 from torch import Tensor
 
 from tinify.ans import BufferedRansEncoder, RansDecoder
@@ -83,13 +84,19 @@ class RasterScanLatentCodec(LatentCodec):
 
     """
 
+    gaussian_conditional: GaussianConditional
+    entropy_parameters: nn.Module
+    context_prediction: MaskedConv2d
+    kernel_size: int
+    padding: int
+
     def __init__(
         self,
         gaussian_conditional: GaussianConditional,
         entropy_parameters: nn.Module,
         context_prediction: MaskedConv2d,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         super().__init__()
         self.gaussian_conditional = gaussian_conditional
         self.entropy_parameters = entropy_parameters
@@ -97,7 +104,7 @@ class RasterScanLatentCodec(LatentCodec):
         self.kernel_size = _to_single(self.context_prediction.kernel_size)
         self.padding = (self.kernel_size - 1) // 2
 
-    def forward(self, y: Tensor, params: Tensor) -> Dict[str, Any]:
+    def forward(self, y: Tensor, params: Tensor) -> dict[str, Any]:
         y_hat = self.gaussian_conditional.quantize(
             y, "noise" if self.training else "dequantize"
         )
@@ -107,9 +114,9 @@ class RasterScanLatentCodec(LatentCodec):
         _, y_likelihoods = self.gaussian_conditional(y, scales_hat, means=means_hat)
         return {"likelihoods": {"y": y_likelihoods}, "y_hat": y_hat}
 
-    def compress(self, y: Tensor, ctx_params: Tensor) -> Dict[str, Any]:
+    def compress(self, y: Tensor, ctx_params: Tensor) -> dict[str, Any]:
         n, _, y_height, y_width = y.shape
-        ds = []
+        ds: list[dict[str, Any]] = []
         for i in range(n):
             encoder = BufferedRansEncoder()
             y_hat = raster_scan_compress_single_stream(
@@ -131,14 +138,14 @@ class RasterScanLatentCodec(LatentCodec):
 
     def decompress(
         self,
-        strings: List[List[bytes]],
-        shape: Tuple[int, int],
+        strings: list[list[bytes]],
+        shape: tuple[int, int],
         ctx_params: Tensor,
-        **kwargs,
-    ) -> Dict[str, Any]:
+        **kwargs: Any,
+    ) -> dict[str, Any]:
         (y_strings,) = strings
         y_height, y_width = shape
-        ds = []
+        ds: list[dict[str, Any]] = []
         for i in range(len(y_strings)):
             decoder = RansDecoder()
             decoder.set_stream(y_strings[i])
@@ -159,7 +166,7 @@ class RasterScanLatentCodec(LatentCodec):
         return default_collate(ds)
 
     @staticmethod
-    def merge(*args):
+    def merge(*args: Tensor) -> Tensor:
         return torch.cat(args, dim=1)
 
 
@@ -175,7 +182,7 @@ def raster_scan_compress_single_stream(
     width: int,
     padding: int,
     kernel_size: int,
-    merge: Callable[..., Tensor] = lambda *args: torch.cat(args, dim=1),
+    merge: Callable[..., Tensor] = lambda *args: torch.cat(args, dim=1),  # noqa: E731
 ) -> Tensor:
     """Compresses y and writes to encoder bitstream.
 
@@ -244,8 +251,8 @@ def raster_scan_decompress_single_stream(
     width: int,
     padding: int,
     kernel_size: int,
-    device,
-    merge: Callable[..., Tensor] = lambda *args: torch.cat(args, dim=1),
+    device: torch.device | str,
+    merge: Callable[..., Tensor] = lambda *args: torch.cat(args, dim=1),  # noqa: E731
 ) -> Tensor:
     """Decodes y_hat from decoder bitstream.
 
@@ -301,12 +308,12 @@ def _pad_2d(x: Tensor, padding: int) -> Tensor:
     return F.pad(x, (padding, padding, padding, padding))
 
 
-def _to_single(xs):
+def _to_single(xs: tuple[int, ...]) -> int:
     assert all(x == xs[0] for x in xs)
     return xs[0]
 
 
-def default_collate(batch: List[Dict[K, V]]) -> Dict[K, List[V]]:
+def default_collate(batch: list[dict[K, V]]) -> dict[K, list[V] | Tensor]:
     """Combines a list of dictionaries into a single dictionary.
 
     Workaround to ``torch.utils.data.default_collate`` bug in PyTorch 2.0.0.
@@ -314,17 +321,17 @@ def default_collate(batch: List[Dict[K, V]]) -> Dict[K, List[V]]:
     if not isinstance(batch, list) or any(not isinstance(d, dict) for d in batch):
         raise NotImplementedError
 
-    result = _ld_to_dl(batch)
+    result: dict[K, list[V] | Tensor] = _ld_to_dl(batch)
 
     for k, vs in result.items():
-        if all(isinstance(v, Tensor) for v in vs):
-            result[k] = torch.stack(vs)
+        if isinstance(vs, list) and all(isinstance(v, Tensor) for v in vs):
+            result[k] = torch.stack(vs)  # type: ignore[arg-type]
 
     return result
 
 
-def _ld_to_dl(ld: List[Dict[K, V]]) -> Dict[K, List[V]]:
-    dl = {}
+def _ld_to_dl(ld: list[dict[K, V]]) -> dict[K, list[V]]:
+    dl: dict[K, list[V]] = {}
     for d in ld:
         for k, v in d.items():
             if k not in dl:

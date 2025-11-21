@@ -33,20 +33,20 @@ import torch.nn as nn
 
 from tinify.layers.basic import Gain, Interleave, Reshape
 
-GAIN = 10.0
+GAIN: float = 10.0
 
 
 def conv1d_group_seq(
-    num_channels,
-    groups=None,
-    kernel_size=1,
-    enabled=("bn", "act"),
-    enabled_final=("bn", "act"),
-):
+    num_channels: list[int],
+    groups: list[int] | None = None,
+    kernel_size: int = 1,
+    enabled: tuple[str, ...] | list[str] = ("bn", "act"),
+    enabled_final: tuple[str, ...] | list[str] = ("bn", "act"),
+) -> nn.Sequential:
     if groups is None:
         groups = [1] * (len(num_channels) - 1)
     assert len(num_channels) == 0 or len(groups) == len(num_channels) - 1
-    xs = []
+    xs: list[nn.Module] = []
     for i in range(len(num_channels) - 1):
         is_final = i + 1 == len(num_channels) - 1
         xs.append(
@@ -64,7 +64,9 @@ def conv1d_group_seq(
     return nn.Sequential(*xs)
 
 
-def pointnet_g_a_simple(num_channels, groups=None, gain=GAIN):
+def pointnet_g_a_simple(
+    num_channels: list[int], groups: list[int] | None = None, gain: float = GAIN
+) -> nn.Sequential:
     return nn.Sequential(
         *conv1d_group_seq(num_channels, groups),
         nn.AdaptiveMaxPool1d(1),
@@ -72,7 +74,7 @@ def pointnet_g_a_simple(num_channels, groups=None, gain=GAIN):
     )
 
 
-def pointnet_g_s_simple(num_channels, gain=GAIN):
+def pointnet_g_s_simple(num_channels: list[int], gain: float = GAIN) -> nn.Sequential:
     return nn.Sequential(
         Gain((num_channels[0], 1), 1 / gain),
         *conv1d_group_seq(num_channels, enabled=["act"], enabled_final=[]),
@@ -80,7 +82,7 @@ def pointnet_g_s_simple(num_channels, gain=GAIN):
     )
 
 
-def pointnet_classification_backend(num_channels):
+def pointnet_classification_backend(num_channels: list[int]) -> nn.Sequential:
     return nn.Sequential(
         *conv1d_group_seq(num_channels[:-1], enabled_final=[]),
         nn.Dropout(0.3),

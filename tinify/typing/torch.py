@@ -27,18 +27,20 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from typing import Dict, Union
+from __future__ import annotations
+
+from typing import TypeAlias
 
 import torch.nn as nn
 
 from torch.optim import Optimizer
-from torch.optim.lr_scheduler import ReduceLROnPlateau, _LRScheduler
+from torch.optim.lr_scheduler import LRScheduler, ReduceLROnPlateau
 from torch.utils.data import DataLoader, Dataset
 
-TCriterion = nn.Module
-TDataLoader = DataLoader
-TDataset = Dataset
-TModel = nn.Module
-TModule = nn.Module
-TOptimizer = Union[Optimizer, Dict[str, Optimizer]]
-TScheduler = Union[ReduceLROnPlateau, _LRScheduler]
+TCriterion: TypeAlias = nn.Module
+TDataLoader: TypeAlias = DataLoader
+TDataset: TypeAlias = Dataset
+TModel: TypeAlias = nn.Module
+TModule: TypeAlias = nn.Module
+TOptimizer: TypeAlias = Optimizer | dict[str, Optimizer]
+TScheduler: TypeAlias = ReduceLROnPlateau | LRScheduler

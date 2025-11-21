@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 # Copyright (c) 2021-2025, InterDigital Communications, Inc
 # All rights reserved.
 
@@ -43,7 +45,9 @@ class RandomPermutation(BaseTransform):
     (functional name: :obj:`random_permutation`).
     """
 
-    def __init__(self, *, attrs=("pos",)):
+    attrs: tuple[str, ...]
+
+    def __init__(self, *, attrs: tuple[str, ...] = ("pos",)) -> None:
         self.attrs = attrs
 
     def __call__(self, data: Data) -> Data:

@@ -27,16 +27,25 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
 from collections import OrderedDict
+from typing import Any
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-KEY_MAP = {"_bias": "biases", "_matrix": "matrices", "_factor": "factors"}
+from torch import Tensor
+
+KEY_MAP: dict[str, str] = {
+    "_bias": "biases",
+    "_matrix": "matrices",
+    "_factor": "factors",
+}
 
 
-def find_named_module(module, query):
+def find_named_module(module: nn.Module, query: str) -> nn.Module | None:
     """Helper function to find a named module. Returns a `nn.Module` or `None`
 
     Args:
@@ -50,7 +59,7 @@ def find_named_module(module, query):
     return next((m for n, m in module.named_modules() if n == query), None)
 
 
-def find_named_buffer(module, query):
+def find_named_buffer(module: nn.Module, query: str) -> Tensor | None:
     """Helper function to find a named buffer. Returns a `torch.Tensor` or `None`
 
     Args:
@@ -64,13 +73,13 @@ def find_named_buffer(module, query):
 
 
 def _update_registered_buffer(
-    module,
-    buffer_name,
-    state_dict_key,
-    state_dict,
-    policy="resize_if_empty",
-    dtype=torch.int,
-):
+    module: nn.Module,
+    buffer_name: str,
+    state_dict_key: str,
+    state_dict: dict[str, Any],
+    policy: str = "resize_if_empty",
+    dtype: torch.dtype = torch.int,
+) -> None:
     new_size = state_dict[state_dict_key].size()
     registered_buf = find_named_buffer(module, buffer_name)
 
@@ -92,13 +101,13 @@ def _update_registered_buffer(
 
 
 def update_registered_buffers(
-    module,
-    module_name,
-    buffer_names,
-    state_dict,
-    policy="resize_if_empty",
-    dtype=torch.int,
-):
+    module: nn.Module,
+    module_name: str,
+    buffer_names: list[str],
+    state_dict: dict[str, Any],
+    policy: str = "resize_if_empty",
+    dtype: torch.dtype = torch.int,
+) -> None:
     """Update the registered buffers in a module according to the tensors sized
     in a state_dict.
 
@@ -129,7 +138,7 @@ def update_registered_buffers(
         )
 
 
-def remap_old_keys(module_name, state_dict):
+def remap_old_keys(module_name: str, state_dict: dict[str, Any]) -> dict[str, Any]:
     def remap_subkey(s: str) -> str:
         for k, v in KEY_MAP.items():
             if s.startswith(k):
@@ -137,7 +146,7 @@ def remap_old_keys(module_name, state_dict):
 
         return s
 
-    new_state_dict = OrderedDict()
+    new_state_dict: dict[str, Any] = OrderedDict()
     for k, v in state_dict.items():
         if k.startswith(module_name):
             k = ".".join((module_name, remap_subkey(k.split(f"{module_name}.")[1])))
@@ -147,7 +156,9 @@ def remap_old_keys(module_name, state_dict):
     return new_state_dict
 
 
-def conv(in_channels, out_channels, kernel_size=5, stride=2):
+def conv(
+    in_channels: int, out_channels: int, kernel_size: int = 5, stride: int = 2
+) -> nn.Conv2d:
     return nn.Conv2d(
         in_channels,
         out_channels,
@@ -157,7 +168,9 @@ def conv(in_channels, out_channels, kernel_size=5, stride=2):
     )
 
 
-def deconv(in_channels, out_channels, kernel_size=5, stride=2):
+def deconv(
+    in_channels: int, out_channels: int, kernel_size: int = 5, stride: int = 2
+) -> nn.ConvTranspose2d:
     return nn.ConvTranspose2d(
         in_channels,
         out_channels,
@@ -170,7 +183,7 @@ def deconv(in_channels, out_channels, kernel_size=5, stride=2):
 
 def gaussian_kernel1d(
     kernel_size: int, sigma: float, device: torch.device, dtype: torch.dtype
-):
+) -> Tensor:
     """1D Gaussian kernel."""
     khalf = (kernel_size - 1) / 2.0
     x = torch.linspace(-khalf, khalf, steps=kernel_size, dtype=dtype, device=device)
@@ -180,13 +193,18 @@ def gaussian_kernel1d(
 
 def gaussian_kernel2d(
     kernel_size: int, sigma: float, device: torch.device, dtype: torch.dtype
-):
+) -> Tensor:
     """2D Gaussian kernel."""
     kernel = gaussian_kernel1d(kernel_size, sigma, device, dtype)
     return torch.mm(kernel[:, None], kernel[None, :])
 
 
-def gaussian_blur(x, kernel=None, kernel_size=None, sigma=None):
+def gaussian_blur(
+    x: Tensor,
+    kernel: Tensor | None = None,
+    kernel_size: int | None = None,
+    sigma: float | None = None,
+) -> Tensor:
     """Apply a 2D gaussian blur on a given image tensor."""
     if kernel is None:
         if kernel_size is None or sigma is None:
@@ -205,7 +223,7 @@ def gaussian_blur(x, kernel=None, kernel_size=None, sigma=None):
     return x
 
 
-def meshgrid2d(N: int, C: int, H: int, W: int, device: torch.device):
+def meshgrid2d(N: int, C: int, H: int, W: int, device: torch.device) -> Tensor:
     """Create a 2D meshgrid for interpolation."""
     theta = torch.eye(2, 3, device=device).unsqueeze(0).expand(N, 2, 3)
     return F.affine_grid(theta, (N, C, H, W), align_corners=False)

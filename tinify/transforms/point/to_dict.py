@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 # Copyright (c) 2021-2025, InterDigital Communications, Inc
 # All rights reserved.
 
@@ -27,9 +29,11 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from typing import Any, Dict
+from collections.abc import Callable, Mapping
+from typing import Any, Literal
 
 import torch
+from torch import Tensor
 
 from torch_geometric.data import Data
 from torch_geometric.data.datapipes import functional_transform
@@ -45,7 +49,11 @@ class ToDict(BaseTransform):
     (functional name: :obj:`to_dict`).
     """
 
-    def __init__(self, *, wrapper="dict"):
+    wrap: type[dict[str, Tensor]] | type[Data]
+
+    def __init__(
+        self, *, wrapper: Literal["dict", "torch_geometric.data.Data"] = "dict"
+    ) -> None:
         if wrapper == "dict":
             self.wrap = dict
         elif wrapper == "torch_geometric.data.Data":
@@ -53,9 +61,9 @@ class ToDict(BaseTransform):
         else:
             raise ValueError(f"Unknown wrapper: {wrapper}")
 
-    def __call__(self, data) -> Dict[str, Any]:
-        data = {
+    def __call__(self, data: Mapping[str, Any]) -> dict[str, Tensor] | Data:
+        converted_data: dict[str, Tensor] = {
             k: v if isinstance(v, torch.Tensor) else torch.tensor(v)
             for k, v in data.items()
         }
-        return self.wrap(**data)
+        return self.wrap(**converted_data)

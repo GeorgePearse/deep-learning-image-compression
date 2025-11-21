@@ -27,6 +27,11 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
+from typing import Any
+
+import torch.nn as nn
 from torch.hub import load_state_dict_from_url
 
 from tinify.models import (
@@ -43,14 +48,14 @@ __all__ = [
     "mbt2018_vbr",
 ]
 
-model_architectures = {
+model_architectures: dict[str, type[nn.Module]] = {
     "bmshj2018-hyperprior-vbr": ScaleHyperpriorVbr,
     "mbt2018-mean-vbr": MeanScaleHyperpriorVbr,
     "mbt2018-vbr": JointAutoregressiveHierarchicalPriorsVbr,
 }
 
-root_url = "https://tinify.s3.amazonaws.com/models/v1"
-model_urls = {
+root_url: str = "https://tinify.s3.amazonaws.com/models/v1"
+model_urls: dict[str, dict[str, str]] = {
     "bmshj2018-hyperprior-vbr": {
         "mse": f"{root_url}/bmshj2018-hyperprior-mse-vbr-cddd26be.pth.tar",
         # "ms-ssim": f"{root_url}/bmshj2018-hyperprior-ms-ssim-vbr-HASH.pth.tar",
@@ -65,14 +70,20 @@ model_urls = {
     },
 }
 
-cfgs = {
+cfgs: dict[str, tuple[int, int]] = {
     "bmshj2018-hyperprior-vbr": (192, 320),
     "mbt2018-mean-vbr": (192, 320),
     "mbt2018-vbr": (192, 320),
 }
 
 
-def _load_model(architecture, metric, pretrained=False, progress=True, **kwargs):
+def _load_model(
+    architecture: str,
+    metric: str,
+    pretrained: bool = False,
+    progress: bool = True,
+    **kwargs: Any,
+) -> nn.Module:
     if architecture not in model_architectures:
         raise ValueError(f'Invalid architecture name "{architecture}"')
 
@@ -96,8 +107,12 @@ def _load_model(architecture, metric, pretrained=False, progress=True, **kwargs)
 
 
 def bmshj2018_hyperprior_vbr(
-    quality=0, metric="mse", pretrained=False, progress=True, **kwargs
-):
+    quality: int = 0,
+    metric: str = "mse",
+    pretrained: bool = False,
+    progress: bool = True,
+    **kwargs: Any,
+) -> nn.Module:
     r"""Variable bitrate (vbr) version of bmshj2018-hyperprior (see tinify/models/google.py) with variable bitrate components detailed in:
     Fatih Kamisli, Fabien Racape and Hyomin Choi
     `"Variable-Rate Learned Image Compression with Multi-Objective Optimization and Quantization-Reconstruction Offsets`"
@@ -120,8 +135,12 @@ def bmshj2018_hyperprior_vbr(
 
 
 def mbt2018_mean_vbr(
-    quality=0, metric="mse", pretrained=False, progress=True, **kwargs
-):
+    quality: int = 0,
+    metric: str = "mse",
+    pretrained: bool = False,
+    progress: bool = True,
+    **kwargs: Any,
+) -> nn.Module:
     r"""Variable bitrate (vbr) version of bmshj2018 (see tinify/models/google.py) with variable bitrate components detailed in:
     Fatih Kamisli, Fabien Racape and Hyomin Choi
     `"Variable-Rate Learned Image Compression with Multi-Objective Optimization and Quantization-Reconstruction Offsets`"
@@ -141,7 +160,13 @@ def mbt2018_mean_vbr(
     return _load_model("mbt2018-mean-vbr", metric, pretrained, progress, **kwargs)
 
 
-def mbt2018_vbr(quality=0, metric="mse", pretrained=False, progress=True, **kwargs):
+def mbt2018_vbr(
+    quality: int = 0,
+    metric: str = "mse",
+    pretrained: bool = False,
+    progress: bool = True,
+    **kwargs: Any,
+) -> nn.Module:
     r"""Variable bitrate (vbr) version of mbt2018 (see tinify/models/google.py) with variable bitrate components detailed in:
     Fatih Kamisli, Fabien Racape and Hyomin Choi
     `"Variable-Rate Learned Image Compression with Multi-Objective Optimization and Quantization-Reconstruction Offsets`"

@@ -29,14 +29,19 @@
 
 # Code adapted from https://github.com/yunhe20/D-PCC
 
+from __future__ import annotations
+
 import math
+from typing import Any
 
 import numpy as np
+import numpy.typing as npt
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 from einops import rearrange, repeat
+from torch import Tensor
 
 try:
     from pointops.functions import pointops
@@ -64,7 +69,17 @@ class DownsampleLayer(nn.Module):
             CVPR 2022.
     """
 
-    def __init__(self, downsample_rate, dim, hidden_dim, k, ngroups):
+    k: int
+    downsample_rate: float
+    pre_conv: nn.Conv1d
+    embed_features: PointTransformerLayer
+    embed_positions: PositionEmbeddingLayer
+    embed_densities: DensityEmbeddingLayer
+    post_conv: nn.Conv1d
+
+    def __init__(
+        self, downsample_rate: float, dim: int, hidden_dim: int, k: int, ngroups: int
+    ) -> None:
         super().__init__()
         self.k = k
         self.downsample_rate = downsample_rate
@@ -74,7 +89,9 @@ class DownsampleLayer(nn.Module):
         self.embed_densities = DensityEmbeddingLayer(hidden_dim, dim, ngroups)
         self.post_conv = nn.Conv1d(dim * 3, dim, 1)
 
-    def get_density(self, downsampled_xyzs, input_xyzs):
+    def get_density(
+        self, downsampled_xyzs: Tensor, input_xyzs: Tensor
+    ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
         # downsampled_xyzs: (b, 3, m)
         # input_xyzs: (b, 3, n)
         # nn_idx: (b, n, 1)
@@ -91,7 +108,9 @@ class DownsampleLayer(nn.Module):
         mean_distance = distance / downsample_num
         return downsample_num, mean_distance, mask, knn_idx
 
-    def forward(self, xyzs, feats):
+    def forward(
+        self, xyzs: Tensor, feats: Tensor
+    ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
         # xyzs: (b, 3, n)
         # features: (b, cin, n)
         # sample_idx: (b, m)
@@ -115,7 +134,9 @@ class DownsampleLayer(nn.Module):
 
         return sampled_xyzs, sampled_feats, downsample_num, mean_distance
 
-    def downsample_positions(self, xyzs, sample_num):
+    def downsample_positions(
+        self, xyzs: Tensor, sample_num: Tensor
+    ) -> tuple[Tensor, Tensor]:
         _, _, n = xyzs.shape
         sample_num = round(n * self.downsample_rate)
         xyzs_tr = xyzs.permute(0, 2, 1).contiguous()
@@ -124,8 +145,15 @@ class DownsampleLayer(nn.Module):
         return sampled_xyzs, sample_idx
 
     def downsample_features(
-        self, sampled_xyzs, xyzs, feats, downsample_num, sample_idx, knn_idx, mask
-    ):
+        self,
+        sampled_xyzs: Tensor,
+        xyzs: Tensor,
+        feats: Tensor,
+        downsample_num: Tensor,
+        sample_idx: Tensor,
+        knn_idx: Tensor,
+        mask: Tensor,
+    ) -> Tensor:
         # sampled_xyzs: (b, 3, m)
         # sampled_feats: (b, c, m)
 
@@ -157,7 +185,16 @@ class PointTransformerLayer(nn.Module):
             CVPR 2021.
     """
 
-    def __init__(self, in_fdim, out_fdim, hidden_dim, ngroups):
+    w_qs: nn.Conv1d
+    w_ks: nn.Conv1d
+    w_vs: nn.Conv1d
+    conv_delta: nn.Sequential
+    conv_gamma: nn.Sequential
+    post_conv: nn.Conv1d
+
+    def __init__(
+        self, in_fdim: int, out_fdim: int, hidden_dim: int, ngroups: int
+    ) -> None:
         super().__init__()
 
         self.w_qs = nn.Conv1d(in_fdim, hidden_dim, 1)
@@ -180,7 +217,16 @@ class PointTransformerLayer(nn.Module):
 
         self.post_conv = nn.Conv1d(hidden_dim, out_fdim, 1)
 
-    def forward(self, q_xyzs, k_xyzs, q_feats, k_feats, v_feats, knn_idx, mask):
+    def forward(
+        self,
+        q_xyzs: Tensor,
+        k_xyzs: Tensor,
+        q_feats: Tensor,
+        k_feats: Tensor,
+        v_feats: Tensor,
+        knn_idx: Tensor,
+        mask: Tensor,
+    ) -> Tensor:
         # q: (b, c, m)
         # k: (b, c, n)
         # knn_idx: (b, m, k)
@@ -232,7 +278,10 @@ class PositionEmbeddingLayer(nn.Module):
             CVPR 2022.
     """
 
-    def __init__(self, hidden_dim, dim, ngroups):
+    embed_positions: nn.Sequential
+    attention: nn.Sequential
+
+    def __init__(self, hidden_dim: int, dim: int, ngroups: int) -> None:
         super().__init__()
 
         self.embed_positions = nn.Sequential(
@@ -249,7 +298,9 @@ class PositionEmbeddingLayer(nn.Module):
             nn.Conv2d(hidden_dim, dim, 1),
         )
 
-    def forward(self, q_xyzs, k_xyzs, knn_idx, mask):
+    def forward(
+        self, q_xyzs: Tensor, k_xyzs: Tensor, knn_idx: Tensor, mask: Tensor
+    ) -> Tensor:
         # q_xyzs: (b, 3, m)
         # k_xyzs: (b, 3, n)
         # knn_idx: (b, m, k)
@@ -294,7 +345,7 @@ class PositionEmbeddingLayer(nn.Module):
 class DensityEmbeddingLayer(nn.Module):
     """Density embedding for downsampling, as introduced in [He2022pcc]_.
 
-    Applies an embedding ℝ → ℝᶜ to the local point density (scalar).
+    Applies an embedding ℝ -> ℝ^c to the local point density (scalar).
     The local point density is measured using the mean distance of the
     points within the neighborhood of a "downsampled" centroid.
     This information is useful when upsampling from the single centroid.
@@ -307,7 +358,9 @@ class DensityEmbeddingLayer(nn.Module):
             CVPR 2022.
     """
 
-    def __init__(self, hidden_dim, dim, ngroups):
+    embed_densities: nn.Sequential
+
+    def __init__(self, hidden_dim: int, dim: int, ngroups: int) -> None:
         super().__init__()
         self.embed_densities = nn.Sequential(
             nn.Conv1d(1, hidden_dim, 1),
@@ -316,7 +369,7 @@ class DensityEmbeddingLayer(nn.Module):
             nn.Conv1d(hidden_dim, dim, 1),
         )
 
-    def forward(self, downsample_num):
+    def forward(self, downsample_num: Tensor) -> Tensor:
         # downsample_num: (b, 1, n)
         # density_embedding: (b, c, n)
         density_embedding = self.embed_densities(downsample_num)
@@ -338,7 +391,17 @@ class UpsampleLayer(nn.Module):
             CVPR 2022.
     """
 
-    def __init__(self, dim, hidden_dim, k, sub_point_conv_mode, upsample_rate):
+    xyzs_upsample_nn: XyzsUpsampleLayer
+    feats_upsample_nn: FeatsUpsampleLayer
+
+    def __init__(
+        self,
+        dim: int,
+        hidden_dim: int,
+        k: int,
+        sub_point_conv_mode: str,
+        upsample_rate: int,
+    ) -> None:
         super().__init__()
         self.xyzs_upsample_nn = XyzsUpsampleLayer(
             dim, hidden_dim, k, sub_point_conv_mode, upsample_rate
@@ -347,7 +410,7 @@ class UpsampleLayer(nn.Module):
             dim, hidden_dim, k, sub_point_conv_mode, upsample_rate
         )
 
-    def forward(self, xyzs, feats):
+    def forward(self, xyzs: Tensor, feats: Tensor) -> tuple[Tensor, Tensor]:
         upsampled_xyzs = self.xyzs_upsample_nn(xyzs, feats)
         upsampled_feats = self.feats_upsample_nn(feats)
         return upsampled_xyzs, upsampled_feats
@@ -369,7 +432,10 @@ class UpsampleNumLayer(nn.Module):
             CVPR 2022.
     """
 
-    def __init__(self, dim, hidden_dim, upsample_rate):
+    upsample_rate: int
+    upsample_num_nn: nn.Sequential
+
+    def __init__(self, dim: int, hidden_dim: int, upsample_rate: int) -> None:
         super().__init__()
         self.upsample_rate = upsample_rate
         self.upsample_num_nn = nn.Sequential(
@@ -379,7 +445,7 @@ class UpsampleNumLayer(nn.Module):
             nn.Sigmoid(),
         )
 
-    def forward(self, feats):
+    def forward(self, feats: Tensor) -> Tensor:
         # upsample_num: (b, n)
         upsample_frac = self.upsample_num_nn(feats).squeeze(1)
         upsample_num = upsample_frac * (self.upsample_rate - 1) + 1
@@ -401,7 +467,17 @@ class RefineLayer(nn.Module):
             CVPR 2022.
     """
 
-    def __init__(self, dim, hidden_dim, k, sub_point_conv_mode, decompress_normal):
+    xyzs_refine_nn: XyzsUpsampleLayer
+    feats_refine_nn: FeatsUpsampleLayer
+
+    def __init__(
+        self,
+        dim: int,
+        hidden_dim: int,
+        k: int,
+        sub_point_conv_mode: str,
+        decompress_normal: bool,
+    ) -> None:
         super().__init__()
 
         self.xyzs_refine_nn = XyzsUpsampleLayer(
@@ -421,7 +497,7 @@ class RefineLayer(nn.Module):
             decompress_normal=decompress_normal,
         )
 
-    def forward(self, xyzs, feats):
+    def forward(self, xyzs: Tensor, feats: Tensor) -> tuple[Tensor, Tensor]:
         # refined_xyzs: (b, 3, n, 1)
         # refined_xyzs: (b, 3, n)  [after rearrange]
         # refined_feats: (b, c, n, 1)
@@ -454,7 +530,19 @@ class XyzsUpsampleLayer(nn.Module):
             CVPR 2022.
     """
 
-    def __init__(self, dim, hidden_dim, k, sub_point_conv_mode, upsample_rate):
+    upsample_rate: int
+    hypothesis: Tensor
+    weight_nn: SubPointConv
+    scale_nn: SubPointConv
+
+    def __init__(
+        self,
+        dim: int,
+        hidden_dim: int,
+        k: int,
+        sub_point_conv_mode: str,
+        upsample_rate: int,
+    ) -> None:
         super().__init__()
 
         self.upsample_rate = upsample_rate
@@ -472,7 +560,7 @@ class XyzsUpsampleLayer(nn.Module):
             hidden_dim, k, sub_point_conv_mode, dim, 1 * upsample_rate, upsample_rate
         )
 
-    def forward(self, xyzs, feats):
+    def forward(self, xyzs: Tensor, feats: Tensor) -> Tensor:
         # xyzs: (b, 3, n)
         # feats: (b, c, n)
         # weights: (b, 43, n, u)
@@ -526,15 +614,19 @@ class FeatsUpsampleLayer(nn.Module):
             CVPR 2022.
     """
 
+    upsample_rate: int
+    decompress_normal: bool
+    feats_nn: SubPointConv
+
     def __init__(
         self,
-        dim,
-        hidden_dim,
-        k,
-        sub_point_conv_mode,
-        upsample_rate,
-        decompress_normal=False,
-    ):
+        dim: int,
+        hidden_dim: int,
+        k: int,
+        sub_point_conv_mode: str,
+        upsample_rate: int,
+        decompress_normal: bool = False,
+    ) -> None:
         super().__init__()
 
         self.upsample_rate = upsample_rate
@@ -545,7 +637,7 @@ class FeatsUpsampleLayer(nn.Module):
             hidden_dim, k, sub_point_conv_mode, dim, out_fdim, upsample_rate
         )
 
-    def forward(self, feats):
+    def forward(self, feats: Tensor) -> Tensor:
         # upsampled_feats: (b, c, n, u)
         upsampled_feats = self.feats_nn(feats)
         if not self.decompress_normal:
@@ -570,13 +662,29 @@ class SubPointConv(nn.Module):
             CVPR 2022.
     """
 
-    def __init__(self, hidden_dim, k, mode, in_fdim, out_fdim, group_num):
+    mode: str
+    group_num: int
+    mlp: nn.Sequential | None
+    edge_conv: EdgeConv | None
+
+    def __init__(
+        self,
+        hidden_dim: int,
+        k: int,
+        mode: str,
+        in_fdim: int,
+        out_fdim: int,
+        group_num: int,
+    ) -> None:
         super().__init__()
 
         self.mode = mode
         self.group_num = group_num
         group_in_fdim = in_fdim // group_num
         group_out_fdim = out_fdim // group_num
+
+        self.mlp = None
+        self.edge_conv = None
 
         if self.mode == "mlp":
             self.mlp = nn.Sequential(
@@ -589,7 +697,7 @@ class SubPointConv(nn.Module):
         else:
             raise ValueError(f"Unknown mode: {self.mode}")
 
-    def forward(self, feats):
+    def forward(self, feats: Tensor) -> Tensor:
         # feats: (b, cin * g, n)
         # expanded_feats: (b, cout, n, g)
 
@@ -613,15 +721,15 @@ class EdgeConv(nn.Module):
     """EdgeConv introduced by [Wang2019dgcnn]_.
 
     First, groups similar feature vectors together via k-nearest neighbors
-    using the following distance metric between feature vectors fᵢ and fⱼ:
-    distance[i, j] = 2fᵢᵀfⱼ - ||fᵢ||² - ||fⱼ||².
+    using the following distance metric between feature vectors fi and fj:
+    distance[i, j] = 2fi^T fj - ||fi||^2 - ||fj||^2.
 
-    Then, for each group of feature vectors (f₁, ..., fₖ) with centroid fₒ,
+    Then, for each group of feature vectors (f1, ..., fk) with centroid fo,
     the residual feature vectors are each concatenated with the centroid,
     then an MLP is applied to each resulting vector individually,
-    i.e., (MLP(f₁ - fₒ, fₒ), ..., MLP(fₖ - fₒ, fₒ)),
+    i.e., (MLP(f1 - fo, fo), ..., MLP(fk - fo, fo)),
     and finally the elementwise max is taken across the resulting vectors,
-    resulting in a single vector fₘₐₓ for the group.
+    resulting in a single vector fmax for the group.
 
     Original code located at [DGCNN]_ under MIT License.
 
@@ -636,7 +744,10 @@ class EdgeConv(nn.Module):
             <https://github.com/WangYueFt/dgcnn/blob/master/pytorch/model.py>`_
     """
 
-    def __init__(self, in_fdim, out_fdim, hidden_dim, k):
+    k: int
+    conv: nn.Sequential
+
+    def __init__(self, in_fdim: int, out_fdim: int, hidden_dim: int, k: int) -> None:
         super().__init__()
         self.k = k
         self.conv = nn.Sequential(
@@ -646,7 +757,7 @@ class EdgeConv(nn.Module):
         )
 
     # WARN: This requires at least O(n^2) memory.
-    def knn(self, feats, k):
+    def knn(self, feats: Tensor, k: int) -> Tensor:
         # feats: (b, c, n)
         # sq_norm: (b, 1, n)
         # pairwise_dot: (b, n, n)
@@ -664,7 +775,7 @@ class EdgeConv(nn.Module):
         _, knn_idx = pairwise_distance.topk(k=k, dim=-1)
         return knn_idx
 
-    def get_graph_features(self, feats, k):
+    def get_graph_features(self, feats: Tensor, k: int) -> Tensor:
         # knn_feats: (b, c, n, k)
         # graph_feats: (b, 2c, n, k)
         dim = feats.shape[1]
@@ -679,7 +790,7 @@ class EdgeConv(nn.Module):
         graph_feats = torch.cat((knn_feats - repeated_feats, repeated_feats), dim=1)
         return graph_feats
 
-    def forward(self, feats):
+    def forward(self, feats: Tensor) -> Tensor:
         # feats: (b, c, n)
         # graph_feats: (b, 2c, n, k)
         # expanded_feats: (b, cout*g, n, k)
@@ -691,7 +802,9 @@ class EdgeConv(nn.Module):
         return feats_new
 
 
-def icosahedron2sphere(level):
+def icosahedron2sphere(
+    level: int,
+) -> tuple[npt.NDArray[np.floating[Any]], npt.NDArray[np.int_]]:
     """Samples uniformly on a sphere using a icosahedron.
 
     Code adapted from [IcoSphere_MATLAB]_ and [IcoSphere_Python]_,
@@ -777,7 +890,9 @@ def icosahedron2sphere(level):
     return np.array(coor), np.array(tri)
 
 
-def nearby_distance_sum(a_xyzs, b_xyzs, k):
+def nearby_distance_sum(
+    a_xyzs: Tensor, b_xyzs: Tensor, k: int
+) -> tuple[Tensor, Tensor, Tensor, Tensor]:
     """Computes sum of nearby distances to B for each point in A.
 
     Partitions a point set B into non-intersecting sets

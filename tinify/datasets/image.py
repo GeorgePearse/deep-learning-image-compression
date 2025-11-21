@@ -27,16 +27,21 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
 from pathlib import Path
+from typing import Any, Callable, TypeVar
 
 from PIL import Image
 from torch.utils.data import Dataset
 
 from tinify.registry import register_dataset
 
+T = TypeVar("T")
+
 
 @register_dataset("ImageFolder")
-class ImageFolder(Dataset):
+class ImageFolder(Dataset[Image.Image | T]):
     """Load an image folder database. Training and testing image samples
     are respectively stored in separate directories:
 
@@ -57,7 +62,15 @@ class ImageFolder(Dataset):
         split (string): split mode ('train' or 'val')
     """
 
-    def __init__(self, root, transform=None, split="train"):
+    samples: list[Path]
+    transform: Callable[[Image.Image], T] | None
+
+    def __init__(
+        self,
+        root: str | Path,
+        transform: Callable[[Image.Image], T] | None = None,
+        split: str = "train",
+    ) -> None:
         splitdir = Path(root) / split
 
         if not splitdir.is_dir():
@@ -67,7 +80,7 @@ class ImageFolder(Dataset):
 
         self.transform = transform
 
-    def __getitem__(self, index):
+    def __getitem__(self, index: int) -> Image.Image | T:
         """
         Args:
             index (int): Index
@@ -80,5 +93,5 @@ class ImageFolder(Dataset):
             return self.transform(img)
         return img
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.samples)

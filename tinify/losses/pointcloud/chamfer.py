@@ -29,8 +29,11 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import torch
 import torch.nn as nn
+from torch import Tensor
 
 from einops import rearrange
 
@@ -51,37 +54,47 @@ class ChamferPccRateDistortionLoss(nn.Module):
     For compression models that reconstruct the input point cloud.
     """
 
-    LMBDA_DEFAULT = {
+    LMBDA_DEFAULT: dict[str, float] = {
         # "bpp": 1.0,
         "rec": 1.0,
     }
 
-    def __init__(self, lmbda=None, rate_key="bpp"):
+    lmbda: dict[str, float]
+
+    def __init__(
+        self, lmbda: dict[str, float] | None = None, rate_key: str = "bpp"
+    ) -> None:
         super().__init__()
         self.lmbda = lmbda or dict(self.LMBDA_DEFAULT)
         self.lmbda.setdefault(rate_key, 1.0)
 
-    def forward(self, output, target):
-        out = {
+    def forward(
+        self, output: dict[str, Any], target: dict[str, Tensor]
+    ) -> dict[str, Tensor]:
+        out: dict[str, Tensor] = {
             **self.compute_rate_loss(output, target),
             **self.compute_rec_loss(output, target),
         }
 
-        out["loss"] = sum(
-            self.lmbda[k] * out[f"{k}_loss"]
-            for k in self.lmbda.keys()
-            if f"{k}_loss" in out
-        )
+        loss_sum: Tensor = torch.tensor(0.0, device=list(out.values())[0].device)
+        for k in self.lmbda.keys():
+            if f"{k}_loss" in out:
+                loss_sum = loss_sum + self.lmbda[k] * out[f"{k}_loss"]
+        out["loss"] = loss_sum
 
         return out
 
-    def compute_rate_loss(self, output, target):
+    def compute_rate_loss(
+        self, output: dict[str, Any], target: dict[str, Tensor]
+    ) -> dict[str, Tensor]:
         if "likelihoods" not in output:
             return {}
         N, P, _ = target["pos"].shape
         return compute_rate_loss(output["likelihoods"], N, P)
 
-    def compute_rec_loss(self, output, target):
+    def compute_rec_loss(
+        self, output: dict[str, Any], target: dict[str, Tensor]
+    ) -> dict[str, Tensor]:
         dist1, dist2, _, _ = chamfer_distance(
             target["pos"], output["x_hat"], order="b n c"
         )
@@ -89,16 +102,18 @@ class ChamferPccRateDistortionLoss(nn.Module):
         return {"rec_loss": loss_chamfer}
 
 
-def chamfer_distance(xyzs1, xyzs2, order="b n c"):
+def chamfer_distance(
+    xyzs1: Tensor, xyzs2: Tensor, order: str = "b n c"
+) -> tuple[Tensor, Tensor, Tensor, Tensor]:
     # idx1, dist1: (b, n1)
     # idx2, dist2: (b, n2)
-    xyzs1_bcn = rearrange(xyzs1, f"{order} -> b c n").contiguous()
-    xyzs1_bnc = rearrange(xyzs1, f"{order} -> b n c").contiguous()
-    xyzs2_bcn = rearrange(xyzs2, f"{order} -> b c n").contiguous()
-    xyzs2_bnc = rearrange(xyzs2, f"{order} -> b n c").contiguous()
-    idx1 = pointops.knnquery_heap(1, xyzs2_bnc, xyzs1_bnc).long().squeeze(2)
-    idx2 = pointops.knnquery_heap(1, xyzs1_bnc, xyzs2_bnc).long().squeeze(2)
+    xyzs1_bcn: Tensor = rearrange(xyzs1, f"{order} -> b c n").contiguous()
+    xyzs1_bnc: Tensor = rearrange(xyzs1, f"{order} -> b n c").contiguous()
+    xyzs2_bcn: Tensor = rearrange(xyzs2, f"{order} -> b c n").contiguous()
+    xyzs2_bnc: Tensor = rearrange(xyzs2, f"{order} -> b n c").contiguous()
+    idx1: Tensor = pointops.knnquery_heap(1, xyzs2_bnc, xyzs1_bnc).long().squeeze(2)
+    idx2: Tensor = pointops.knnquery_heap(1, xyzs1_bnc, xyzs2_bnc).long().squeeze(2)
     torch.cuda.empty_cache()
-    dist1 = ((xyzs1_bcn - index_points(xyzs2_bcn, idx1)) ** 2).sum(1)
-    dist2 = ((xyzs2_bcn - index_points(xyzs1_bcn, idx2)) ** 2).sum(1)
+    dist1: Tensor = ((xyzs1_bcn - index_points(xyzs2_bcn, idx1)) ** 2).sum(1)
+    dist2: Tensor = ((xyzs2_bcn - index_points(xyzs1_bcn, idx2)) ** 2).sum(1)
     return dist1, dist2, idx1, idx2

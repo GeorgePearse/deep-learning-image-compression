@@ -27,6 +27,10 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
+from typing import Any
+
 import torch.nn as nn
 
 from tinify.layers import (
@@ -56,7 +60,7 @@ class Cheng2020Anchor(JointAutoregressiveHierarchicalPriors):
         N (int): Number of channels
     """
 
-    def __init__(self, N=192, **kwargs):
+    def __init__(self, N: int = 192, **kwargs: Any) -> None:
         super().__init__(N=N, M=N, **kwargs)
 
         self.g_a = nn.Sequential(
@@ -105,7 +109,7 @@ class Cheng2020Anchor(JointAutoregressiveHierarchicalPriors):
         )
 
     @classmethod
-    def from_state_dict(cls, state_dict):
+    def from_state_dict(cls, state_dict: dict[str, Any]) -> Cheng2020Anchor:
         """Return a new model instance from `state_dict`."""
         N = state_dict["g_a.0.conv1.weight"].size(0)
         net = cls(N)
@@ -127,7 +131,7 @@ class Cheng2020Attention(Cheng2020Anchor):
         N (int): Number of channels
     """
 
-    def __init__(self, N=192, **kwargs):
+    def __init__(self, N: int = 192, **kwargs: Any) -> None:
         super().__init__(N=N, **kwargs)
 
         self.g_a = nn.Sequential(

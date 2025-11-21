@@ -27,11 +27,12 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
 import hashlib
 import urllib
 import urllib.parse
 import urllib.request
-
 from pathlib import Path
 
 import requests
@@ -39,7 +40,13 @@ import requests
 from tqdm import tqdm
 
 
-def download_url(url, path, chunk_size=65536, check_certificate=True, overwrite=False):
+def download_url(
+    url: str,
+    path: str | Path,
+    chunk_size: int = 65536,
+    check_certificate: bool = True,
+    overwrite: bool = False,
+) -> Path:
     path = Path(path)
 
     if path.is_dir():
@@ -65,10 +72,12 @@ def download_url(url, path, chunk_size=65536, check_certificate=True, overwrite=
     return path
 
 
-def hash_file(path, method="sha256", bufsize=131072):
-    hash = hashlib.sha256() if method == "sha256" else None
+def hash_file(path: str | Path, method: str = "sha256", bufsize: int = 131072) -> str:
+    hash_obj = hashlib.sha256() if method == "sha256" else None
+    if hash_obj is None:
+        raise ValueError(f"Unknown hash method: {method}")
     mv = memoryview(bytearray(bufsize))
     with open(path, "rb", buffering=0) as f:
         for n in iter(lambda: f.readinto(mv), 0):
-            hash.update(mv[:n])
-    return hash.hexdigest()
+            hash_obj.update(mv[:n])
+    return hash_obj.hexdigest()

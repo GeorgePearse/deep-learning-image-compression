@@ -27,6 +27,11 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
+from typing import Any
+
+import torch.nn as nn
 from torch.hub import load_state_dict_from_url
 
 from tinify.models.video import ScaleSpaceFlow
@@ -37,12 +42,12 @@ __all__ = [
     "ssf2020",
 ]
 
-model_architectures = {
+model_architectures: dict[str, type[nn.Module]] = {
     "ssf2020": ScaleSpaceFlow,
 }
 
-root_url = "https://tinify.s3.amazonaws.com/models/v1"
-model_urls = {
+root_url: str = "https://tinify.s3.amazonaws.com/models/v1"
+model_urls: dict[str, dict[str, dict[int, str]]] = {
     "ssf2020": {
         "mse": {
             1: f"{root_url}/ssf2020-mse-1-c1ac1a47.pth.tar",
@@ -60,8 +65,13 @@ model_urls = {
 
 
 def _load_model(
-    architecture, metric, quality, pretrained=False, progress=True, **kwargs
-):
+    architecture: str,
+    metric: str,
+    quality: int,
+    pretrained: bool = False,
+    progress: bool = True,
+    **kwargs: Any,
+) -> nn.Module:
     if architecture not in model_architectures:
         raise ValueError(f'Invalid architecture name "{architecture}"')
 
@@ -86,7 +96,13 @@ def _load_model(
     return model
 
 
-def ssf2020(quality, metric="mse", pretrained=False, progress=True, **kwargs):
+def ssf2020(
+    quality: int,
+    metric: str = "mse",
+    pretrained: bool = False,
+    progress: bool = True,
+    **kwargs: Any,
+) -> nn.Module:
     r"""Google's first end-to-end optimized video compression from E.
     Agustsson, D. Minnen, N. Johnston, J. Balle, S. J. Hwang, G. Toderici: `"Scale-space flow for end-to-end
     optimized video compression" <https://openaccess.thecvf.com/content_CVPR_2020/html/Agustsson_Scale-Space_Flow_for_End-to-End_Optimized_Video_Compression_CVPR_2020_paper.html>`_,

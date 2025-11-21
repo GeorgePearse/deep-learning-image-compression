@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 # Copyright (c) 2021-2025, InterDigital Communications, Inc
 # All rights reserved.
 
@@ -28,6 +30,7 @@
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import torch
+from torch import Generator, Tensor
 
 from torch_geometric.data import Data
 from torch_geometric.data.datapipes import functional_transform
@@ -51,7 +54,9 @@ class RandomRotateFull(BaseTransform):
 
 
 # See https://math.stackexchange.com/questions/442418/random-generation-of-rotation-matrices/4832876#4832876
-def random_rotation_matrix(batch_size: int, ndim=3, generator=None) -> torch.Tensor:
+def random_rotation_matrix(
+    batch_size: int, ndim: int = 3, generator: Generator | None = None
+) -> Tensor:
     z = torch.randn((batch_size, ndim, ndim), generator=generator)
     q, r = torch.linalg.qr(z)
     sign = 2 * (r.diagonal(dim1=-2, dim2=-1) >= 0) - 1

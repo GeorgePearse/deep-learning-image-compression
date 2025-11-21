@@ -27,10 +27,12 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
 import math
 import warnings
 
-from typing import cast
+from typing import Any, cast
 
 import torch
 import torch.nn as nn
@@ -57,7 +59,9 @@ SCALES_MAX = 256
 SCALES_LEVELS = 64
 
 
-def get_scale_table(min=SCALES_MIN, max=SCALES_MAX, levels=SCALES_LEVELS):
+def get_scale_table(
+    min: float = SCALES_MIN, max: float = SCALES_MAX, levels: int = SCALES_LEVELS
+) -> Tensor:
     """Returns table of logarithmically scales."""
     return torch.exp(torch.linspace(math.log(min), math.log(max), levels))
 
@@ -67,7 +71,13 @@ class CompressionModel(nn.Module):
     EntropyBottleneck or GaussianConditional modules.
     """
 
-    def __init__(self, entropy_bottleneck_channels=None, init_weights=None):
+    entropy_bottleneck: EntropyBottleneck
+
+    def __init__(
+        self,
+        entropy_bottleneck_channels: int | None = None,
+        init_weights: bool | None = None,
+    ) -> None:
         super().__init__()
 
         if entropy_bottleneck_channels is not None:
@@ -91,7 +101,7 @@ class CompressionModel(nn.Module):
                 stacklevel=2,
             )
 
-    def load_state_dict(self, state_dict, strict=True):
+    def load_state_dict(self, state_dict: dict[str, Any], strict: bool = True) -> Any:
         for name, module in self.named_modules():
             if not any(x.startswith(name) for x in state_dict.keys()):
                 continue
@@ -115,7 +125,12 @@ class CompressionModel(nn.Module):
 
         return nn.Module.load_state_dict(self, state_dict, strict=strict)
 
-    def update(self, scale_table=None, force=False, update_quantiles: bool = False):
+    def update(
+        self,
+        scale_table: Tensor | None = None,
+        force: bool = False,
+        update_quantiles: bool = False,
+    ) -> bool:
         """Updates EntropyBottleneck and GaussianConditional CDFs.
 
         Needs to be called once after training to be able to later perform the
@@ -190,7 +205,7 @@ class SimpleVAECompressionModel(CompressionModel):
     def __getitem__(self, key: str) -> LatentCodec:
         return self.latent_codec[key]
 
-    def forward(self, x):
+    def forward(self, x: Tensor) -> dict[str, Any]:
         y = self.g_a(x)
         y_out = self.latent_codec(y)
         y_hat = y_out["y_hat"]
@@ -200,12 +215,12 @@ class SimpleVAECompressionModel(CompressionModel):
             "likelihoods": y_out["likelihoods"],
         }
 
-    def compress(self, x):
+    def compress(self, x: Tensor) -> dict[str, Any]:
         y = self.g_a(x)
         outputs = self.latent_codec.compress(y)
         return outputs
 
-    def decompress(self, *args, **kwargs):
+    def decompress(self, *args: Any, **kwargs: Any) -> dict[str, Tensor]:
         y_out = self.latent_codec.decompress(*args, **kwargs)
         y_hat = y_out["y_hat"]
         x_hat = self.g_s(y_hat).clamp_(0, 1)

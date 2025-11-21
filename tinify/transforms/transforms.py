@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from torch import Tensor
+
 from . import functional as F_transforms
 
 __all__ = [
@@ -14,7 +18,7 @@ class RGB2YCbCr:
     shape of (3xHxW) or (Nx3xHxW).
     """
 
-    def __call__(self, rgb):
+    def __call__(self, rgb: Tensor) -> Tensor:
         """
         Args:
             rgb (torch.Tensor): 3D or 4D floating point RGB tensor
@@ -24,7 +28,7 @@ class RGB2YCbCr:
         """
         return F_transforms.rgb2ycbcr(rgb)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"{self.__class__.__name__}()"
 
 
@@ -34,7 +38,7 @@ class YCbCr2RGB:
     shape of (3xHxW) or (Nx3xHxW).
     """
 
-    def __call__(self, ycbcr):
+    def __call__(self, ycbcr: Tensor) -> Tensor:
         """
         Args:
             ycbcr(torch.Tensor): 3D or 4D floating point RGB tensor
@@ -44,7 +48,7 @@ class YCbCr2RGB:
         """
         return F_transforms.ycbcr2rgb(ycbcr)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"{self.__class__.__name__}()"
 
 
@@ -62,10 +66,14 @@ class YUV444To420:
         >>> u.size()  # 1, 1, 16, 16
     """
 
-    def __init__(self, mode: str = "avg_pool"):
+    mode: str
+
+    def __init__(self, mode: str = "avg_pool") -> None:
         self.mode = str(mode)
 
-    def __call__(self, yuv):
+    def __call__(
+        self, yuv: Tensor | tuple[Tensor, Tensor, Tensor]
+    ) -> tuple[Tensor, Tensor, Tensor]:
         """
         Args:
             yuv (torch.Tensor or (torch.Tensor, torch.Tensor, torch.Tensor)):
@@ -77,7 +85,7 @@ class YUV444To420:
         """
         return F_transforms.yuv_444_to_420(yuv, mode=self.mode)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"{self.__class__.__name__}()"
 
 
@@ -98,11 +106,16 @@ class YUV420To444:
         >>> x.size()  # 1, 3, 32, 32
     """
 
-    def __init__(self, mode: str = "bilinear", return_tuple: bool = False):
+    mode: str
+    return_tuple: bool
+
+    def __init__(self, mode: str = "bilinear", return_tuple: bool = False) -> None:
         self.mode = str(mode)
         self.return_tuple = bool(return_tuple)
 
-    def __call__(self, yuv):
+    def __call__(
+        self, yuv: tuple[Tensor, Tensor, Tensor]
+    ) -> Tensor | tuple[Tensor, Tensor, Tensor]:
         """
         Args:
             yuv (torch.Tensor, torch.Tensor, torch.Tensor): 420 input frames in
@@ -114,5 +127,5 @@ class YUV420To444:
         """
         return F_transforms.yuv_420_to_444(yuv, return_tuple=self.return_tuple)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"{self.__class__.__name__}(return_tuple={self.return_tuple})"

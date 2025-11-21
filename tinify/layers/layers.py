@@ -27,9 +27,11 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
 import math
 
-from typing import Any, Tuple
+from typing import Any, Callable
 
 import torch
 import torch.nn as nn
@@ -57,7 +59,12 @@ __all__ = [
 
 
 class _SpectralConvNdMixin:
-    def __init__(self, dim: Tuple[int, ...]):
+    dim: tuple[int, ...]
+    weight_transformed: nn.Parameter
+    kernel_size: tuple[int, ...]
+    _parameters: dict[str, Any]
+
+    def __init__(self, dim: tuple[int, ...]) -> None:
         self.dim = dim
         self.weight_transformed = nn.Parameter(self._to_transform_domain(self.weight))
         del self._parameters["weight"]  # Unregister weight, and fallback to property.
@@ -99,7 +106,7 @@ class SpectralConv2d(nn.Conv2d, _SpectralConvNdMixin):
     by Johannes Ballé, PCS 2018.
     """
 
-    def __init__(self, *args: Any, **kwargs: Any):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         _SpectralConvNdMixin.__init__(self, dim=(-2, -1))
 
@@ -110,7 +117,7 @@ class SpectralConvTranspose2d(nn.ConvTranspose2d, _SpectralConvNdMixin):
     Transposed version of :class:`SpectralConv2d`.
     """
 
-    def __init__(self, *args: Any, **kwargs: Any):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         _SpectralConvNdMixin.__init__(self, dim=(-2, -1))
 
@@ -127,7 +134,9 @@ class MaskedConv2d(nn.Conv2d):
     following layers.
     """
 
-    def __init__(self, *args: Any, mask_type: str = "A", **kwargs: Any):
+    mask: Tensor
+
+    def __init__(self, *args: Any, mask_type: str = "A", **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
 
         if mask_type not in ("A", "B"):
@@ -157,7 +166,7 @@ class CheckerboardMaskedConv2d(MaskedConv2d):
     following layers.
     """
 
-    def __init__(self, *args: Any, mask_type: str = "A", **kwargs: Any):
+    def __init__(self, *args: Any, mask_type: str = "A", **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
 
         if mask_type not in ("A", "B"):
@@ -196,7 +205,13 @@ class ResidualBlockWithStride(nn.Module):
         stride (int): stride value (default: 2)
     """
 
-    def __init__(self, in_ch: int, out_ch: int, stride: int = 2):
+    conv1: nn.Module
+    leaky_relu: nn.LeakyReLU
+    conv2: nn.Module
+    gdn: GDN
+    skip: nn.Module | None
+
+    def __init__(self, in_ch: int, out_ch: int, stride: int = 2) -> None:
         super().__init__()
         self.conv1 = conv3x3(in_ch, out_ch, stride=stride)
         self.leaky_relu = nn.LeakyReLU(inplace=True)
@@ -230,7 +245,13 @@ class ResidualBlockUpsample(nn.Module):
         upsample (int): upsampling factor (default: 2)
     """
 
-    def __init__(self, in_ch: int, out_ch: int, upsample: int = 2):
+    subpel_conv: nn.Sequential
+    leaky_relu: nn.LeakyReLU
+    conv: nn.Module
+    igdn: GDN
+    upsample: nn.Sequential
+
+    def __init__(self, in_ch: int, out_ch: int, upsample: int = 2) -> None:
         super().__init__()
         self.subpel_conv = subpel_conv3x3(in_ch, out_ch, upsample)
         self.leaky_relu = nn.LeakyReLU(inplace=True)
@@ -257,7 +278,12 @@ class ResidualBlock(nn.Module):
         out_ch (int): number of output channels
     """
 
-    def __init__(self, in_ch: int, out_ch: int):
+    conv1: nn.Module
+    leaky_relu: nn.LeakyReLU
+    conv2: nn.Module
+    skip: nn.Module | None
+
+    def __init__(self, in_ch: int, out_ch: int) -> None:
         super().__init__()
         self.conv1 = conv3x3(in_ch, out_ch)
         self.leaky_relu = nn.LeakyReLU(inplace=True)
@@ -294,13 +320,19 @@ class AttentionBlock(nn.Module):
         N (int): Number of channels)
     """
 
-    def __init__(self, N: int):
+    conv_a: nn.Sequential
+    conv_b: nn.Sequential
+
+    def __init__(self, N: int) -> None:
         super().__init__()
 
         class ResidualUnit(nn.Module):
             """Simple residual unit."""
 
-            def __init__(self):
+            conv: nn.Sequential
+            relu: nn.ReLU
+
+            def __init__(self) -> None:
                 super().__init__()
                 self.conv = nn.Sequential(
                     conv1x1(N, N // 2),
@@ -358,7 +390,7 @@ class QReLU(Function):
     """
 
     @staticmethod
-    def forward(ctx, input, bit_depth, beta):
+    def forward(ctx: Any, input: Tensor, bit_depth: int, beta: float) -> Tensor:
         # TODO(choih): allow to use adaptive scale instead of
         # pre-computed scale with gamma function
         ctx.alpha = 0.9943258522851727
@@ -369,7 +401,7 @@ class QReLU(Function):
         return input.clamp(min=0, max=ctx.max_value)
 
     @staticmethod
-    def backward(ctx, grad_output):
+    def backward(ctx: Any, grad_output: Tensor) -> tuple[Tensor, None, None]:
         grad_input = None
         (input,) = ctx.saved_tensors
 
@@ -395,16 +427,16 @@ def sequential_channel_ramp(
     min_ch: int = 0,
     num_layers: int = 3,
     interp: str = "linear",
-    make_layer=None,
-    make_act=None,
+    make_layer: Callable[..., nn.Module] | None = None,
+    make_act: Callable[[], nn.Module] | None = None,
     skip_last_act: bool = True,
-    **layer_kwargs,
+    **layer_kwargs: Any,
 ) -> nn.Module:
     """Interleave layers of gradually ramping channels with nonlinearities."""
     channels = ramp(in_ch, out_ch, num_layers + 1, method=interp).floor().int()
     channels[1:-1] = channels[1:-1].clip(min=min_ch)
     channels = channels.tolist()
-    layers = [
+    layers: list[nn.Module] = [
         module
         for ch_in, ch_out in zip(channels[:-1], channels[1:])
         for module in [
@@ -417,7 +449,13 @@ def sequential_channel_ramp(
     return nn.Sequential(*layers)
 
 
-def ramp(a, b, steps=None, method="linear", **kwargs):
+def ramp(
+    a: int | float,
+    b: int | float,
+    steps: int | None = None,
+    method: str = "linear",
+    **kwargs: Any,
+) -> Tensor:
     if method == "linear":
         return torch.linspace(a, b, steps, **kwargs)
     if method == "log":
