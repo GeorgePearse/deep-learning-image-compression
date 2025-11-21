@@ -77,6 +77,23 @@ docs-serve: ## Serve MkDocs docs locally
 	@mkdocs serve
 
 
+# Build Rust extensions
+.PHONY: build-rust build-rust-dev clean-rust
+
+build-rust: ## Build Rust extensions (release)
+	@echo "--> Building Rust extensions (release)"
+	@cd tinify/rust_exts && maturin build --release
+	@pip install tinify/rust_exts/target/wheels/*.whl --force-reinstall
+
+build-rust-dev: ## Build Rust extensions (development)
+	@echo "--> Building Rust extensions (development)"
+	@cd tinify/rust_exts && maturin develop
+
+clean-rust: ## Clean Rust build artifacts
+	@echo "--> Cleaning Rust build artifacts"
+	@cd tinify/rust_exts && cargo clean
+
+
 # Docker images
 .PHONY: docker docker-cpu
 docker: ## Build docker image

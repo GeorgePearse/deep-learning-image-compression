@@ -90,6 +90,9 @@ pointcloud = [
   # "pointops-yoda", # Please install via uv pip install pointops-yoda --no-build-isolation
   "pyntcloud-yoda",
 ]
+rust = [
+  "maturin>=1.4,<2.0",
+]
 
 # NOTE: Temporarily duplicated from [project.optional-dependencies] until
 # pip supports installing [dependency-groups].
