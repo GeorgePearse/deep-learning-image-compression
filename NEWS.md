@@ -1,3 +1,9 @@
+2025-11-21: Rust extensions (PyO3) added as alternative to C++ pybind11 extensions
+* Ported rANS entropy coding (encoder/decoder) from C++ to Rust
+* Ported pmf_to_quantized_cdf operation to Rust
+* Build with maturin: `cd tinify/rust_exts && maturin develop --release`
+* Python wrappers auto-select Rust or C++ backend
+
 2023-02-26: CompressAI now supports Point Cloud Compression using various models
          
 2022-11-27: CompressAI now includes sadl_codec, which enables to run c++ inteference with full integer operations
