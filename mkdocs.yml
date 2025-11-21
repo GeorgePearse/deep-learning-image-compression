@@ -1,0 +1,119 @@
+site_name: CompressAI
+site_description: A PyTorch library and evaluation platform for end-to-end compression research
+site_url: https://interdigitalinc.github.io/CompressAI/
+repo_url: https://github.com/InterDigitalInc/CompressAI
+repo_name: InterDigitalInc/CompressAI
+
+docs_dir: docs/mkdocs
+site_dir: site
+
+theme:
+  name: material
+  logo: assets/logo.svg
+  favicon: assets/favicon.ico
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.instant.prefetch
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+    - toc.follow
+
+plugins:
+  - search
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          options:
+            docstring_style: google
+            show_source: true
+            show_root_heading: true
+            show_root_full_path: false
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+            members_order: source
+            merge_init_into_class: true
+            separate_signature: true
+            signature_crossrefs: true
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.arithmatex:
+      generic: true
+  - admonition
+  - pymdownx.details
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - def_list
+  - pymdownx.tasklist:
+      custom_checkbox: true
+
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/InterDigitalInc/CompressAI
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/compressai/
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Installation: getting-started/installation.md
+    - Quick Start: getting-started/quickstart.md
+  - Tutorials:
+    - Training Models: tutorials/training.md
+    - Custom Models: tutorials/custom-models.md
+  - API Reference:
+    - api/index.md
+    - Models: api/models.md
+    - Entropy Models: api/entropy-models.md
+    - Latent Codecs: api/latent-codecs.md
+    - Layers: api/layers.md
+    - Losses: api/losses.md
+    - Datasets: api/datasets.md
+    - Transforms: api/transforms.md
+    - Operations: api/ops.md
+  - Model Zoo:
+    - Pre-trained Models: model-zoo/index.md
+    - Performance Benchmarks: model-zoo/benchmarks.md
+  - CLI Reference: cli/usage.md
+  - References: references.md

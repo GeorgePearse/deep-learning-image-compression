@@ -1,0 +1,167 @@
+[build-system]
+requires = [
+  "setuptools>=68",
+  "wheel",
+  "pybind11>=2.6.0",
+  "tomli; python_version < '3.14'",
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "compressai"
+version = "1.2.9.dev0"
+description = "A PyTorch library and evaluation platform for end-to-end compression research"
+authors = [
+    { name = "InterDigital AI Lab", email = "compressai@interdigital.com" },
+]
+readme = "Readme.md"
+requires-python = ">=3.8,<14"
+urls = { Homepage = "https://github.com/InterDigitalInc/CompressAI" }
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Science/Research",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+  "einops",
+  "matplotlib",
+  "numpy >= 1.24.4",
+  "Pandas >= 2.0.3; python_version < '3.9'",
+  "Pandas >= 2.3.2; python_version >= '3.9'",
+  "pybind11>=2.6.0; python_version < '3.10'", # For --no-build-isolation.
+  "pybind11>=2.12.0; python_version >= '3.10'", # For --no-build-isolation.
+  "pytorch-msssim",
+  "scipy",
+  "setuptools>=68", # For --no-build-isolation.
+  "tomli>=2.2.1",
+  "torch-geometric>=2.3.0",
+  "torch>=1.13.1",
+  "torch>=2.6.0; python_version >= '3.12'",
+  "torchvision>=0.14.1,<0.20; python_version < '3.9'",
+  "torchvision>=0.17.0; python_version >= '3.9'",
+  "tqdm",
+  "typing-extensions>=4.0.0",
+  "wheel>=0.32.0", # For --no-build-isolation.
+]
+
+[project.optional-dependencies]
+test = [
+  "plotly",
+  "pytest",
+  "pytest-cov",
+]
+dev = [
+  "black",
+  "flake8",
+  "flake8-bugbear",
+  "flake8-comprehensions",
+  "isort",
+  "mypy",
+  "plotly",
+  "pytest",
+  "pytest-cov",
+  "ruff==0.8.6",
+]
+doc = [
+  "Jinja2<3.1",
+  "sphinx==4.3.0",
+  "sphinx-book-theme==1.0.1",
+]
+mkdocs = [
+  "mkdocs>=1.6",
+  "mkdocs-material>=9.5",
+  "mkdocstrings[python]>=0.24",
+  "mkdocs-gen-files>=0.5",
+  "mkdocs-literate-nav>=0.6",
+  "mkdocs-section-index>=0.3",
+]
+tutorials = [
+  "ipywidgets",
+  "jupyter",
+]
+pointcloud = [
+  # "pointops-yoda", # Please install via uv pip install pointops-yoda --no-build-isolation
+  "pyntcloud-yoda",
+]
+
+# NOTE: Temporarily duplicated from [project.optional-dependencies] until
+# pip supports installing [dependency-groups].
+[dependency-groups]
+test = [
+  "plotly",
+  "pytest",
+  "pytest-cov",
+]
+dev = [
+  "black",
+  "flake8",
+  "flake8-bugbear",
+  "flake8-comprehensions",
+  "isort",
+  "mypy",
+  "ruff==0.8.6",
+  { include-group = "test" },
+]
+doc = [
+  "Jinja2<3.1",
+  "sphinx==4.3.0",
+  "sphinx-book-theme==1.0.1",
+]
+mkdocs = [
+  "mkdocs>=1.6",
+  "mkdocs-material>=9.5",
+  "mkdocstrings[python]>=0.24",
+  "mkdocs-gen-files>=0.5",
+  "mkdocs-literate-nav>=0.6",
+  "mkdocs-section-index>=0.3",
+]
+tutorials = [
+  "ipywidgets",
+  "jupyter",
+]
+
+[tool.setuptools]
+package-dir = {"" = "."}
+zip-safe = false
+
+[tool.setuptools.packages.find]
+exclude = ["tests"]
+
+[tool.black]
+line-length = 88
+target-version = ['py38', 'py39', 'py310', 'py311', 'py312']
+include = '\.pyi?$'
+exclude = '''
+/(
+		\.eggs
+		| \.git
+		| \.mypy_cache
+		| venv*
+		| _build
+		| build
+		| dist
+)/
+'''
+
+[tool.isort]
+multi_line_output = 3
+lines_between_types = 1
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true
+line_length = 88
+known_third_party = "PIL,pytorch_msssim,torchvision,torch"
+skip_gitignore = true
+
+[tool.pytest.ini_options]
+markers = [
+    "pretrained: download and check pretrained models (slow, deselect with '-m \"not pretrained\"')",
+    "slow: all slow tests (pretrained models, train, etc...)",
+]
