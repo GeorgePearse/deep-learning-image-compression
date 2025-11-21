@@ -113,7 +113,7 @@ def parse_args(argv):
     parser.add_argument(
         "-lr", "--learning-rate", default=1e-4, type=float, help="Learning rate"
     )
-    parser.add_argument("--batch-size", type=int, default=16, help="Batch size")
+    parser.add_argument("--batch-size", type=int, default=32, help="Batch size")
     parser.add_argument(
         "--test-batch-size", type=int, default=64, help="Test batch size"
     )
@@ -162,6 +162,12 @@ def parse_args(argv):
         default="32-true",
         help="Precision (default: %(default)s)",
     )
+    parser.add_argument(
+        "--epoch-multiplier",
+        type=int,
+        default=10,
+        help="Repeat dataset N times per epoch (default: 10)",
+    )
     return parser.parse_args(argv)
 
 
@@ -202,6 +208,11 @@ def main(argv):
     train_dataset = datasets.CIFAR10(
         root="./data", train=True, download=True, transform=train_transform
     )
+    # Repeat training data to increase epoch size
+    if args.epoch_multiplier > 1:
+        train_dataset = torch.utils.data.ConcatDataset(
+            [train_dataset] * args.epoch_multiplier
+        )
     test_dataset = datasets.CIFAR10(
         root="./data", train=False, download=True, transform=test_transform
     )
