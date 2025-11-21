@@ -66,6 +66,10 @@ def test_train_example():
         "42",
         "--num-workers",
         "2",
+        "--accelerator",
+        "cpu",
+        "--devices",
+        "1",
     ]
 
     f = io.StringIO()

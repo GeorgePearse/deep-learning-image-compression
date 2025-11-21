@@ -29,9 +29,10 @@
 
 from . import pointcloud
 from .pointcloud import *
-from .rate_distortion import RateDistortionLoss
+from .rate_distortion import RateDistortionLoss, VideoRateDistortionLoss
 
 __all__ = [
     *pointcloud.__all__,
     "RateDistortionLoss",
+    "VideoRateDistortionLoss",
 ]

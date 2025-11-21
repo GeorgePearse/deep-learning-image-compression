@@ -20,7 +20,7 @@ from torch.utils.data import DataLoader
 from torchvision import transforms
 
 from tinify.datasets import ImageFolder, VideoFolder
-from tinify.losses import RateDistortionLoss
+from tinify.losses import RateDistortionLoss, VideoRateDistortionLoss
 from tinify.optimizers import net_aux_optimizer
 from tinify.registry import MODELS
 from tinify.zoo import image_models, video_models
@@ -326,9 +326,12 @@ def train(config: Config):
     )
 
     # Setup loss
-    criterion = RateDistortionLoss(
-        lmbda=config.training.lmbda, metric=config.training.metric
-    )
+    if config.domain == "video":
+        criterion = VideoRateDistortionLoss(lmbda=config.training.lmbda)
+    else:
+        criterion = RateDistortionLoss(
+            lmbda=config.training.lmbda, metric=config.training.metric
+        )
 
     # Load checkpoint if resuming
     last_epoch = 0
